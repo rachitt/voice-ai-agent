@@ -23,3 +23,8 @@
 - Ask yourself : "Would a staff engineer approve this?"
 - When given a bug report : just fix it
 - For bugs, dont just scratch the surface. Dive into the root cause and start fixing from there.
+
+### Context management
+- At the beginning of each session read `tasks/next_session.md`.
+
+- at the end of a session, write a brief 2-3 line summary in `tasks/next_session.md` on the tasks completed in this session and clear the contents. In 5-6 lines outline the tasks for the next session.
