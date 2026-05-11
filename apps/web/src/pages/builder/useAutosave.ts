@@ -6,8 +6,8 @@ const DEBOUNCE_MS = 1500
 
 /**
  * Debounced PATCH /v1/agents/:id whenever the graph or agent metadata
- * changes. No-op for offline demo route. The backend mints a fresh
- * AgentVersion per PATCH — accepted churn cost for now.
+ * changes. No-op for offline demo route. Backend mutates the live draft
+ * AgentVersion in place; a new version is only minted on Publish.
  */
 export function useAutosave(agentId: string) {
   const nodes = useBuilder((s) => s.nodes)

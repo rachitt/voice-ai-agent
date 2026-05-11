@@ -11,6 +11,7 @@ export function BuilderTopbar({ agentId }: { agentId: string }) {
   const saveStatus = useBuilder((s) => s.saveStatus)
   const saveError = useBuilder((s) => s.saveError)
   const setSaveStatus = useBuilder((s) => s.setSaveStatus)
+  const setAgentMetaFields = useBuilder((s) => s.setAgentMetaFields)
   const [publishErrors, setPublishErrors] = useState<string[] | null>(null)
   const [publishing, setPublishing] = useState(false)
   const [testCallOpen, setTestCallOpen] = useState(false)
@@ -24,7 +25,18 @@ export function BuilderTopbar({ agentId }: { agentId: string }) {
     setPublishErrors(null)
     setPublishing(true)
     try {
-      await api.publishAgent(agentMeta.id, { version_id: agentMeta.versionId, env: 'production' })
+      const detail = await api.publishAgent(agentMeta.id, {
+        version_id: agentMeta.versionId,
+        env: 'production',
+      })
+      const newDraft = [...detail.versions].sort((a, b) => b.version - a.version)[0]
+      if (newDraft) {
+        setAgentMetaFields({
+          versionId: newDraft.id,
+          versionNumber: newDraft.version,
+          publishedVersionId: detail.published_version_id,
+        })
+      }
       setSaveStatus('saved')
     } catch (e) {
       const msg = String(e)

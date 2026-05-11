@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.auth import Principal, require_api_key
-from app.db.models import Agent, AgentVersion
+from app.db.models import Agent, AgentEnv, AgentVersion
 from app.db.session import get_db
 from app.schemas.agents import (
     AgentCreate,
@@ -71,6 +71,44 @@ async def get_agent(
     return agent
 
 
+_VERSION_FIELDS = (
+    "first_message",
+    "system_prompt",
+    "model_id",
+    "voice_id",
+    "stt_id",
+    "language",
+    "interruption_sensitivity",
+    "vad_silence_ms",
+    "flow_graph",
+    "tools",
+    "knowledge_base_ids",
+    "analysis_plan",
+    "server_url",
+)
+
+
+def _clone_version(src: AgentVersion, *, version: int, env: str) -> AgentVersion:
+    return AgentVersion(
+        agent_id=src.agent_id,
+        version=version,
+        env=env,
+        first_message=src.first_message,
+        system_prompt=src.system_prompt,
+        model_id=src.model_id,
+        voice_id=src.voice_id,
+        stt_id=src.stt_id,
+        language=src.language,
+        interruption_sensitivity=src.interruption_sensitivity,
+        vad_silence_ms=src.vad_silence_ms,
+        flow_graph=src.flow_graph,
+        tools=list(src.tools or []),
+        knowledge_base_ids=list(src.knowledge_base_ids or []),
+        analysis_plan=src.analysis_plan,
+        server_url=src.server_url,
+    )
+
+
 @router.patch("/{agent_id}", response_model=AgentVersionOut)
 async def update_agent(
     agent_id: str,
@@ -87,23 +125,35 @@ async def update_agent(
     if body.name is not None:
         agent.name = body.name
 
-    next_version = (
+    draft = (
         await db.execute(
-            select(func.coalesce(func.max(AgentVersion.version), 0) + 1).where(
-                AgentVersion.agent_id == agent_id
-            )
+            select(AgentVersion)
+            .where(AgentVersion.agent_id == agent_id, AgentVersion.env == AgentEnv.draft)
+            .order_by(AgentVersion.version.desc())
+            .limit(1)
         )
-    ).scalar_one()
+    ).scalar_one_or_none()
 
-    new_version = AgentVersion(
-        agent_id=agent_id,
-        version=next_version,
-        **body.model_dump(exclude={"name"}, exclude_none=True),
-    )
-    db.add(new_version)
+    if draft is None:
+        latest = (
+            await db.execute(
+                select(AgentVersion)
+                .where(AgentVersion.agent_id == agent_id)
+                .order_by(AgentVersion.version.desc())
+                .limit(1)
+            )
+        ).scalar_one()
+        draft = _clone_version(latest, version=latest.version + 1, env=AgentEnv.draft)
+        db.add(draft)
+
+    patch = body.model_dump(exclude={"name"}, exclude_unset=True)
+    for k, v in patch.items():
+        if k in _VERSION_FIELDS:
+            setattr(draft, k, v)
+
     await db.commit()
-    await db.refresh(new_version)
-    return new_version
+    await db.refresh(draft)
+    return draft
 
 
 @router.post("/{agent_id}/publish", response_model=AgentDetail)
@@ -143,6 +193,17 @@ async def publish_agent(
 
     await db.execute(update(AgentVersion).where(AgentVersion.id == ver.id).values(env=body.env))
     agent.published_version_id = ver.id
+
+    next_version = (
+        await db.execute(
+            select(func.coalesce(func.max(AgentVersion.version), 0) + 1).where(
+                AgentVersion.agent_id == agent_id
+            )
+        )
+    ).scalar_one()
+    new_draft = _clone_version(ver, version=next_version, env=AgentEnv.draft)
+    db.add(new_draft)
+
     await db.commit()
     await db.refresh(agent, attribute_names=["versions"])
     return agent
