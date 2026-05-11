@@ -4,9 +4,11 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.logging import log
 from app.db.models import Call, CallEvent, CallStatus
 from app.db.session import get_db
+from app.telephony.signature import WebhookSignatureError, verify_telnyx
 
 router = APIRouter(prefix="/v1/webhooks", tags=["webhooks"])
 
@@ -19,9 +21,16 @@ async def telnyx_webhook(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     body = await request.body()
-    # TODO: verify ed25519 signature using settings.telnyx_webhook_public_key
-    # Telnyx uses ed25519 public-key sigs; deferred to telephony hardening pass.
-    _ = (telnyx_signature_ed25519, telnyx_timestamp, body)
+    if get_settings().telnyx_webhook_public_key:
+        try:
+            verify_telnyx(
+                raw_body=body,
+                signature_b64=telnyx_signature_ed25519,
+                timestamp=telnyx_timestamp,
+            )
+        except WebhookSignatureError as exc:
+            log.warning("telnyx.webhook.bad_signature", err=str(exc))
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
 
     try:
         payload = await request.json()
