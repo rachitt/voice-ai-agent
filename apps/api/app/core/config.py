@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     s3_region: str = Field("us-east-1")
     enable_object_store: bool = Field(False)
     enable_async_kb_ingest: bool = Field(False)
+    enable_webhook_worker: bool = Field(False)
 
     google_oauth_client_id: str = Field("")
     google_oauth_client_secret: str = Field("")
