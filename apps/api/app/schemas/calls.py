@@ -37,3 +37,9 @@ class WebCallCreated(CallOut):
     """Web-call create response includes a short-lived WS session token."""
     ws_token: str
     ws_url: str
+
+
+class StreamTokenOut(BaseModel):
+    token: str
+    expires_at: int
+    ttl_seconds: int

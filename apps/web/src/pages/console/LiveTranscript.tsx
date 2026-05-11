@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Headphones } from 'lucide-react'
-import { getApiBase, getApiKey } from '@/lib/api'
+import { api, getApiBase, getApiKey } from '@/lib/api'
 import { SEED_TRANSCRIPT, type TranscriptLine } from './fixtures'
 import { cn } from '@/lib/cn'
 
@@ -27,40 +27,59 @@ export function LiveTranscript() {
       setErr('Set API key on the Web Call page first.')
       return
     }
-    const url = `${getApiBase()}/v1/calls/${encodeURIComponent(callId)}/stream?token=${encodeURIComponent(key)}`
-    const es = new EventSource(url)
-    esRef.current = es
+
+    let cancelled = false
     let counter = 0
 
-    es.addEventListener('ready', () => setLive(true))
-    es.onmessage = (e) => {
+    ;(async () => {
+      let streamToken: string
       try {
-        const ev = JSON.parse(e.data) as { type?: string; text?: string }
-        if (!ev || !ev.text) return
-        if (ev.type === 'user_text' || ev.type === 'agent_text') {
-          const idx = ++counter
-          const t = secondsToClock(idx)
-          setLines((prev) => [
-            ...prev,
-            {
-              id: `live-${idx}`,
-              who: ev.type === 'agent_text' ? 'agent' : 'caller',
-              text: ev.text ?? '',
-              t,
-            },
-          ])
-        }
-      } catch {
-        // ignore non-JSON
+        const { token } = await api.mintStreamToken(callId)
+        streamToken = token
+      } catch (e) {
+        if (cancelled) return
+        setErr(`stream auth failed: ${String(e)}`)
+        return
       }
-    }
-    es.onerror = () => {
-      setErr('stream error')
-      setLive(false)
-    }
+      if (cancelled) return
+
+      const url = `${getApiBase()}/v1/calls/${encodeURIComponent(callId)}/stream?token=${encodeURIComponent(streamToken)}`
+      const es = new EventSource(url)
+      esRef.current = es
+
+      es.addEventListener('ready', () => setLive(true))
+      es.onmessage = (e) => {
+        try {
+          const ev = JSON.parse(e.data) as { type?: string; text?: string }
+          if (!ev || !ev.text) return
+          if (ev.type === 'user_text' || ev.type === 'agent_text') {
+            const idx = ++counter
+            const t = secondsToClock(idx)
+            setLines((prev) => [
+              ...prev,
+              {
+                id: `live-${idx}`,
+                who: ev.type === 'agent_text' ? 'agent' : 'caller',
+                text: ev.text ?? '',
+                t,
+              },
+            ])
+          }
+        } catch {
+          // ignore non-JSON
+        }
+      }
+      es.onerror = () => {
+        setErr('stream error')
+        setLive(false)
+      }
+    })()
+
     localStorage.setItem(LS_CALL_ID, callId)
     return () => {
-      es.close()
+      cancelled = true
+      esRef.current?.close()
+      esRef.current = null
     }
   }, [callId])
 

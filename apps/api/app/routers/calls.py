@@ -12,8 +12,19 @@ from app.core.security import hash_api_key
 from app.db.models import Agent, ApiKey, Call, CallDirection, CallStatus, Org
 from app.db.session import get_db
 from app.pipeline import event_bus
-from app.pipeline.web_session import mint_ws_token
-from app.schemas.calls import CallOut, PhoneCallCreate, WebCallCreate, WebCallCreated
+from app.pipeline.web_session import (
+    SSE_TOKEN_TTL_SECONDS,
+    mint_sse_token,
+    mint_ws_token,
+    verify_sse_token,
+)
+from app.schemas.calls import (
+    CallOut,
+    PhoneCallCreate,
+    StreamTokenOut,
+    WebCallCreate,
+    WebCallCreated,
+)
 from app.telephony.telnyx import TelnyxClient
 
 router = APIRouter(prefix="/v1/calls", tags=["calls"])
@@ -133,19 +144,15 @@ async def get_call(
     return call
 
 
-async def _principal_via_header_or_query(
+async def _principal_via_bearer(
     authorization: str | None,
-    token: str | None,
     db: AsyncSession,
-) -> Principal:
-    """SSE-friendly auth: accept Bearer header OR ?token= query string."""
-    raw: str | None = None
-    if authorization and authorization.lower().startswith("bearer "):
-        raw = authorization.split(" ", 1)[1].strip()
-    if not raw and token:
-        raw = token.strip()
+) -> Principal | None:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        return None
+    raw = authorization.split(" ", 1)[1].strip()
     if not raw:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "missing api key")
+        return None
     row = (
         await db.execute(
             select(ApiKey, Org)
@@ -154,9 +161,28 @@ async def _principal_via_header_or_query(
         )
     ).first()
     if not row:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid api key")
+        return None
     api_key, org = row
     return Principal(org=org, api_key=api_key)
+
+
+@router.post("/{call_id}/stream-token", response_model=StreamTokenOut)
+async def mint_stream_token(
+    call_id: str,
+    db: AsyncSession = Depends(get_db),
+    p: Principal = Depends(require_api_key),
+) -> StreamTokenOut:
+    """Mint a short-lived (5 min) token bound to this call+org for the SSE stream.
+
+    Avoids exposing the long-lived API key in EventSource URLs.
+    """
+    call = (
+        await db.execute(select(Call).where(Call.id == call_id, Call.org_id == p.org.id))
+    ).scalar_one_or_none()
+    if not call:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "call not found")
+    token, exp = mint_sse_token(call.id, p.org.id)
+    return StreamTokenOut(token=token, expires_at=exp, ttl_seconds=SSE_TOKEN_TTL_SECONDS)
 
 
 @router.get("/{call_id}/stream")
@@ -170,11 +196,23 @@ async def stream_call_events(
 
     Spectator channel — does not see binary audio. Closes when the WS
     producer terminates the call. EventSource lacks header auth so we
-    also accept the api key via `?token=`.
+    accept a short-lived signed `?token=` minted via /stream-token.
+    Programmatic clients can still pass an API key via Authorization.
     """
-    p = await _principal_via_header_or_query(authorization, token, db)
+    org_id: str | None = None
+    if authorization:
+        principal = await _principal_via_bearer(authorization, db)
+        if principal:
+            org_id = principal.org.id
+    if org_id is None and token:
+        org_id = verify_sse_token(token, call_id=call_id)
+        if org_id is None:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid or expired stream token")
+    if org_id is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "missing credentials")
+
     call = (
-        await db.execute(select(Call).where(Call.id == call_id, Call.org_id == p.org.id))
+        await db.execute(select(Call).where(Call.id == call_id, Call.org_id == org_id))
     ).scalar_one_or_none()
     if not call:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "call not found")

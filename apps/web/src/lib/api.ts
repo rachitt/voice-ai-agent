@@ -125,6 +125,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ agent_id: agentId }),
     }),
+  mintStreamToken: (callId: string) =>
+    req<StreamToken>(`/v1/calls/${encodeURIComponent(callId)}/stream-token`, {
+      method: 'POST',
+    }),
+}
+
+export interface StreamToken {
+  token: string
+  expires_at: number
+  ttl_seconds: number
 }
 
 /** Pick the latest AgentVersion (highest `version`) — that's the active draft. */
