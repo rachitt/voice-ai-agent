@@ -97,19 +97,7 @@ async def _build_agent_config(db: AsyncSession, call: Call) -> AgentConfig | Non
     if ver is None:
         return None
 
-    # Resolve tool defs: tools are list of {"name": "end_call"} or full defs
-    tool_defs: list[dict] = []
-    for t in ver.tools or []:
-        if isinstance(t, dict) and t.get("type") == "function":
-            tool_defs.append(t)
-        elif isinstance(t, dict) and "name" in t:
-            entry = REGISTRY.get(t["name"])
-            if entry:
-                tool_defs.append(entry["definition"])
-        elif isinstance(t, str):
-            entry = REGISTRY.get(t)
-            if entry:
-                tool_defs.append(entry["definition"])
+    tool_defs = _resolve_tools(ver)
 
     return AgentConfig(
         model_id=ver.model_id,
@@ -117,7 +105,48 @@ async def _build_agent_config(db: AsyncSession, call: Call) -> AgentConfig | Non
         system_prompt=ver.system_prompt or "",
         first_message=ver.first_message,
         tools=tool_defs,
+        knowledge_base_ids=list(ver.knowledge_base_ids or []),
     )
+
+
+def _resolve_tools(ver: AgentVersion) -> list[dict]:
+    """Resolve tool refs to OpenAI tool schemas, auto-binding kb_lookup when
+    the agent has bound KBs or its flow graph references kb_lookup nodes."""
+    tool_defs: list[dict] = []
+    seen: set[str] = set()
+
+    def _add(defn: dict) -> None:
+        name = defn.get("function", {}).get("name")
+        if name and name not in seen:
+            tool_defs.append(defn)
+            seen.add(name)
+
+    for t in ver.tools or []:
+        if isinstance(t, dict) and t.get("type") == "function":
+            _add(t)
+        elif isinstance(t, dict) and "name" in t:
+            entry = REGISTRY.get(t["name"])
+            if entry:
+                _add(entry["definition"])
+        elif isinstance(t, str):
+            entry = REGISTRY.get(t)
+            if entry:
+                _add(entry["definition"])
+
+    has_kb = bool(ver.knowledge_base_ids)
+    graph = ver.flow_graph or {}
+    if not has_kb and isinstance(graph, dict):
+        for n in graph.get("nodes") or []:
+            data = n.get("data") if isinstance(n, dict) else None
+            if isinstance(data, dict) and data.get("kind") == "kb_lookup":
+                has_kb = True
+                break
+    if has_kb:
+        kb_entry = REGISTRY.get("kb_lookup")
+        if kb_entry:
+            _add(kb_entry["definition"])
+
+    return tool_defs
 
 
 async def _run_session(
@@ -132,7 +161,14 @@ async def _run_session(
         entry = REGISTRY.get(tc.name)
         if not entry:
             return {"error": "unknown_tool", "name": tc.name}
-        ctx = ToolContext(call=call, db=db, telnyx=None, args=tc.arguments)
+        ctx = ToolContext(
+            call=call,
+            db=db,
+            telnyx=None,
+            args=tc.arguments,
+            knowledge_base_ids=list(cfg.knowledge_base_ids or []),
+            embedding_model=cfg.embedding_model,
+        )
         try:
             return await entry["handler"](ctx)
         except Exception as exc:

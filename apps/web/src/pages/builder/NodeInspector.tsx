@@ -128,6 +128,41 @@ export function NodeInspector() {
           />
         </Field>
 
+        {node.data.kind === 'kb_lookup' && (
+          <>
+            <Field label="Knowledge base ID" hint="Defaults to first bound KB">
+              <input
+                data-testid="kb-id-input"
+                className={inputCls}
+                value={node.data.kb_id ?? ''}
+                onChange={(e) => set({ kb_id: e.target.value })}
+                placeholder="kb_abc123"
+              />
+            </Field>
+            <Field label="Query template" hint="Liquid-style {{variables}} OK">
+              <textarea
+                rows={2}
+                data-testid="kb-query-input"
+                className={inputCls}
+                value={node.data.query_template ?? ''}
+                onChange={(e) => set({ query_template: e.target.value })}
+                placeholder="What does the caller want to know about {{topic}}?"
+              />
+            </Field>
+            <Field label="Top K" hint="1–20">
+              <input
+                type="number"
+                min={1}
+                max={20}
+                data-testid="kb-topk-input"
+                className={inputCls}
+                value={node.data.top_k ?? 5}
+                onChange={(e) => set({ top_k: Math.max(1, Math.min(20, Number(e.target.value) || 5)) })}
+              />
+            </Field>
+          </>
+        )}
+
         <Field label="Interruption handling" hint="Allow caller to interrupt mid-utterance">
           <Select
             value={node.data.interruption ?? 'allow'}

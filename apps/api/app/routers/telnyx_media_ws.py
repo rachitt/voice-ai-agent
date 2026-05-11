@@ -77,7 +77,14 @@ async def _run_pstn_session(ws: WebSocket, db: AsyncSession, call: Call, cfg: Ag
         entry = REGISTRY.get(tc.name)
         if not entry:
             return {"error": "unknown_tool", "name": tc.name}
-        ctx = ToolContext(call=call, db=db, telnyx=telnyx, args=tc.arguments)
+        ctx = ToolContext(
+            call=call,
+            db=db,
+            telnyx=telnyx,
+            args=tc.arguments,
+            knowledge_base_ids=list(cfg.knowledge_base_ids or []),
+            embedding_model=cfg.embedding_model,
+        )
         try:
             return await entry["handler"](ctx)
         except Exception as exc:

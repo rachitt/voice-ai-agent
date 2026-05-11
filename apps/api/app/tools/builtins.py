@@ -25,6 +25,8 @@ class ToolContext:
     db: AsyncSession
     telnyx: TelnyxClient | None = None
     args: dict[str, Any] | None = None
+    knowledge_base_ids: list[str] | None = None
+    embedding_model: str = "text-embedding-3-small"
 
 
 Handler = Callable[[ToolContext], Awaitable[dict[str, Any]]]
@@ -132,6 +134,38 @@ async def _leave_voicemail(ctx: ToolContext) -> dict[str, Any]:
     return {"left": True, "message": msg, "ended": True}
 
 
+async def _kb_lookup(ctx: ToolContext) -> dict[str, Any]:
+    """Semantic search over one of the agent's bound knowledge bases."""
+    from app.kb.store import search as kb_search
+
+    args = ctx.args or {}
+    query = (args.get("query") or "").strip()
+    if not query:
+        return {"error": "missing_query"}
+    requested = args.get("kb_id")
+    available = ctx.knowledge_base_ids or []
+    kb_id: str | None = None
+    if requested and requested in available:
+        kb_id = requested
+    elif available:
+        kb_id = available[0]
+    if not kb_id:
+        return {"error": "no_kb_bound"}
+    top_k = int(args.get("top_k") or 5)
+    top_k = max(1, min(top_k, 20))
+    hits = await kb_search(
+        ctx.db, kb_id=kb_id, query=query, embedding_model=ctx.embedding_model, k=top_k
+    )
+    return {
+        "kb_id": kb_id,
+        "query": query,
+        "hits": [
+            {"chunk_id": h.chunk_id, "source_id": h.source_id, "score": h.score, "text": h.text}
+            for h in hits
+        ],
+    }
+
+
 async def _extract_data(ctx: ToolContext) -> dict[str, Any]:
     args = ctx.args or {}
     # Caller-provided values stored on dynamic_variables for downstream use.
@@ -181,6 +215,25 @@ register(
         {"message": {"type": "string", "description": "Message text to speak"}},
     ),
     handler=_leave_voicemail,
+)
+register(
+    "kb_lookup",
+    definition=_def(
+        "kb_lookup",
+        "Search the agent's knowledge base for passages relevant to a natural-language query. Returns the top-k matching chunks with similarity scores.",
+        {
+            "query": {"type": "string", "description": "Natural-language query"},
+            "kb_id": {
+                "type": "string",
+                "description": "Optional: which bound KB to search. Defaults to the agent's first bound KB.",
+            },
+            "top_k": {
+                "type": "integer",
+                "description": "Max results to return (1–20, default 5).",
+            },
+        },
+    ),
+    handler=_kb_lookup,
 )
 register(
     "extract_data",

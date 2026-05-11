@@ -36,6 +36,8 @@ class AgentConfig:
     tools: list[dict] = field(default_factory=list)  # OpenAI tool schemas
     temperature: float = 0.3
     sample_rate: int = 16000
+    knowledge_base_ids: list[str] = field(default_factory=list)
+    embedding_model: str = "text-embedding-3-small"
 
 
 @dataclass
