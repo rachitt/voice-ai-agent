@@ -1,10 +1,14 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { Shell } from './shell'
 import { ConsolePage } from '@/pages/console'
-import { BuilderPage } from '@/pages/builder'
 import { WebCallPage } from '@/pages/web-call'
 import { SignInPage } from '@/pages/signin'
 import { SettingsPage } from '@/pages/settings'
+
+const BuilderPage = lazy(() =>
+  import('@/pages/builder').then((m) => ({ default: m.BuilderPage })),
+)
 
 export function AppRouter() {
   return (
@@ -19,10 +23,25 @@ export function AppRouter() {
         <Route path="tools" element={<Placeholder title="Tools" />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
-      <Route path="builder/:agentId" element={<BuilderPage />} />
+      <Route
+        path="builder/:agentId"
+        element={
+          <Suspense fallback={<BuilderFallback />}>
+            <BuilderPage />
+          </Suspense>
+        }
+      />
       <Route path="builder" element={<Navigate to="/builder/demo" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+  )
+}
+
+function BuilderFallback() {
+  return (
+    <div className="flex h-screen w-screen items-center justify-center bg-bg text-sm text-muted">
+      Loading builder…
+    </div>
   )
 }
 

@@ -19,4 +19,25 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        manualChunks: (id: string) => {
+          if (!id.includes('node_modules')) return undefined
+          if (id.includes('@xyflow')) return 'flow'
+          if (id.includes('recharts') || id.includes('d3-')) return 'charts'
+          if (id.includes('lucide-react')) return 'icons'
+          if (
+            id.includes('react-dom') ||
+            id.includes('react-router') ||
+            /node_modules[\\/]react[\\/]/.test(id) ||
+            /node_modules[\\/]scheduler[\\/]/.test(id)
+          ) {
+            return 'react-vendor'
+          }
+          return undefined
+        },
+      },
+    },
+  },
 })
