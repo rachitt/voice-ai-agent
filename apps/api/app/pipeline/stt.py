@@ -68,7 +68,7 @@ class DeepgramStream:
             "endpointing": self.endpointing_ms,
             "vad_events": "true" if self.vad_events else "false",
         }
-        for r in self.redact:
+        for _r in self.redact:
             params.setdefault("redact", []) if isinstance(params.get("redact"), list) else None
         # Deepgram allows repeated redact=foo&redact=bar params; build manually below.
         base = urlencode({k: v for k, v in params.items() if k != "redact"})

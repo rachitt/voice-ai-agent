@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
@@ -56,17 +56,17 @@ async def telnyx_webhook(
         db.add(
             CallEvent(
                 call_id=call.id,
-                at=datetime.now(timezone.utc),
+                at=datetime.now(UTC),
                 kind=event_type,
                 payload=call_payload,
             )
         )
         if event_type == "call.answered":
             call.status = CallStatus.in_progress
-            call.started_at = datetime.now(timezone.utc)
+            call.started_at = datetime.now(UTC)
         elif event_type == "call.hangup":
             call.status = CallStatus.completed
-            call.ended_at = datetime.now(timezone.utc)
+            call.ended_at = datetime.now(UTC)
             if call.started_at:
                 call.duration_ms = int(
                     (call.ended_at - call.started_at).total_seconds() * 1000

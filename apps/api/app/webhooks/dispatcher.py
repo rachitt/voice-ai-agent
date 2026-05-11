@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import httpx
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.ids import prefixed_id
@@ -20,7 +20,7 @@ BACKOFF_BASE_S = 5.0
 
 def _next_attempt(attempts: int) -> datetime:
     delay = BACKOFF_BASE_S * (2**attempts)
-    return datetime.now(timezone.utc) + timedelta(seconds=delay)
+    return datetime.now(UTC) + timedelta(seconds=delay)
 
 
 async def enqueue(
@@ -32,7 +32,7 @@ async def enqueue(
         url=url,
         event=event,
         payload=payload,
-        next_attempt_at=datetime.now(timezone.utc),
+        next_attempt_at=datetime.now(UTC),
         status="pending",
     )
     db.add(row)
@@ -62,7 +62,7 @@ async def deliver_one(client: httpx.AsyncClient, row: WebhookOutbox) -> bool:
 
 async def run_once() -> int:
     """Pull pending rows, attempt delivery, update state. Returns processed count."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     processed = 0
     async with SessionLocal() as db:
         rows = (
@@ -86,7 +86,7 @@ async def run_once() -> int:
                 processed += 1
                 if ok:
                     row.status = "delivered"
-                    row.delivered_at = datetime.now(timezone.utc)
+                    row.delivered_at = datetime.now(UTC)
                 elif row.attempts >= MAX_ATTEMPTS:
                     row.status = "dead"
                 else:

@@ -14,8 +14,8 @@ os.environ.setdefault("VOICE_WEBHOOK_HMAC_SECRET", "test-hmac")
 
 from app.core.config import get_settings  # noqa: E402
 from app.core.security import generate_api_key  # noqa: E402
-from app.db.base import Base  # noqa: E402
 from app.db import models  # noqa: E402  F401 — register mappers
+from app.db.base import Base  # noqa: E402
 from app.db.session import get_db  # noqa: E402
 from app.main import create_app  # noqa: E402
 
@@ -55,10 +55,11 @@ async def db_engine(base_db_url: str):
     await engine.dispose()
     admin = create_async_engine(admin_url, isolation_level="AUTOCOMMIT")
     async with admin.connect() as conn:
-        await conn.exec_driver_sql(
+        kill_sql = (  # noqa: S608 — test_db is a generated uuid, not user input
             f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
             f"WHERE datname='{test_db}' AND pid <> pg_backend_pid()"
         )
+        await conn.exec_driver_sql(kill_sql)
         await conn.exec_driver_sql(f'DROP DATABASE IF EXISTS "{test_db}"')
     await admin.dispose()
 

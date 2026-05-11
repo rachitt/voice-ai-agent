@@ -36,6 +36,11 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173", "http://localhost:5174"])
 
+    # Public URL that Telnyx + other webhooks can reach (override in prod).
+    public_base_url: str = Field("http://localhost:8000")
+    # wss:// counterpart used as the Telnyx media stream URL.
+    public_ws_base_url: str = Field("ws://localhost:8000")
+
 
 @lru_cache
 def get_settings() -> Settings:

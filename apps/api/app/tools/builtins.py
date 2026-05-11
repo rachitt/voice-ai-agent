@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,7 +45,7 @@ async def dispatch(name: str, ctx: ToolContext) -> dict[str, Any]:
         ctx.db.add(
             CallEvent(
                 call_id=ctx.call.id,
-                at=datetime.now(timezone.utc),
+                at=datetime.now(UTC),
                 kind=f"tool.{name}",
                 payload={"args": ctx.args, "result": result},
             )
@@ -74,7 +74,7 @@ def _def(name: str, description: str, params: dict[str, Any]) -> dict[str, Any]:
 
 async def _end_call(ctx: ToolContext) -> dict[str, Any]:
     ctx.call.status = CallStatus.completed
-    ctx.call.ended_at = datetime.now(timezone.utc)
+    ctx.call.ended_at = datetime.now(UTC)
     if ctx.telnyx and ctx.call.provider_call_id:
         await ctx.telnyx.hangup(ctx.call.provider_call_id)
     return {"status": "ended"}
@@ -103,9 +103,33 @@ async def _send_dtmf(ctx: ToolContext) -> dict[str, Any]:
 
 
 async def _leave_voicemail(ctx: ToolContext) -> dict[str, Any]:
-    # Real impl: synth TTS, play once, then hangup. Stubbed for v1.
-    msg = (ctx.args or {}).get("message", "")
-    return {"left": True, "message": msg[:200]}
+    """End the call after caller-side TTS has spoken the voicemail message.
+
+    The LLM is expected to speak the message in the same turn (its text
+    becomes audio via the live TTS path). After this returns, the conversation
+    loop terminates. For PSTN calls, also instruct the carrier to hang up.
+    """
+    msg = str((ctx.args or {}).get("message") or "")
+    msg = msg[:1000]
+
+    # Persist on the call row so downstream analytics see "voicemail left".
+    new_vars = dict(ctx.call.dynamic_variables or {})
+    new_vars["voicemail_message"] = msg
+    new_vars["voicemail_left_at"] = datetime.now(UTC).isoformat()
+    ctx.call.dynamic_variables = new_vars
+
+    # Mark call completed (mirrors end_call semantics).
+    ctx.call.status = CallStatus.completed
+    ctx.call.ended_at = datetime.now(UTC)
+
+    # PSTN: tell Telnyx to drop the leg.
+    if ctx.telnyx and ctx.call.provider_call_id:
+        try:
+            await ctx.telnyx.hangup(ctx.call.provider_call_id)
+        except Exception as exc:
+            log.warning("voicemail.telnyx_hangup_error", err=str(exc))
+
+    return {"left": True, "message": msg, "ended": True}
 
 
 async def _extract_data(ctx: ToolContext) -> dict[str, Any]:

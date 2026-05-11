@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy import select, update
@@ -39,7 +39,7 @@ async def require_api_key(
 
     api_key, org = row
     await db.execute(
-        update(ApiKey).where(ApiKey.id == api_key.id).values(last_used_at=datetime.now(timezone.utc))
+        update(ApiKey).where(ApiKey.id == api_key.id).values(last_used_at=datetime.now(UTC))
     )
     await db.commit()
     return Principal(org=org, api_key=api_key)

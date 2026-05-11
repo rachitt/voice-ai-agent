@@ -14,6 +14,7 @@ from app.schemas.agents import (
     AgentVersionOut,
     PublishIn,
 )
+from app.schemas.flow_graph_validators import validate_flow_graph
 
 router = APIRouter(prefix="/v1/agents", tags=["agents"])
 
@@ -131,6 +132,14 @@ async def publish_agent(
     ).scalar_one_or_none()
     if not ver:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "version not found")
+
+    if ver.flow_graph is not None:
+        result = validate_flow_graph(ver.flow_graph)
+        if not result.ok:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                {"errors": result.errors, "warnings": result.warnings},
+            )
 
     await db.execute(update(AgentVersion).where(AgentVersion.id == ver.id).values(env=body.env))
     agent.published_version_id = ver.id

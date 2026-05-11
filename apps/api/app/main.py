@@ -5,7 +5,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.logging import configure_logging, log
-from app.routers import agents, calls, knowledge_bases, phone_numbers, squads, tools, webhooks
+from app.routers import (
+    agents,
+    calls,
+    knowledge_bases,
+    phone_numbers,
+    squads,
+    telnyx_media_ws,
+    tools,
+    web_call_ws,
+    webhooks,
+)
 
 
 @asynccontextmanager
@@ -38,6 +48,8 @@ def create_app() -> FastAPI:
     app.include_router(knowledge_bases.router)
     app.include_router(squads.router)
     app.include_router(calls.router)
+    app.include_router(web_call_ws.router)
+    app.include_router(telnyx_media_ws.router)
     app.include_router(webhooks.router)
 
     return app

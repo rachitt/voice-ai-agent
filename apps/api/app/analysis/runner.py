@@ -6,7 +6,7 @@ emits an `analysis.completed` webhook (caller wires the outbox).
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -104,7 +104,7 @@ async def analyze_call(
     plan = plan or {}
 
     out: dict[str, Any] = {
-        "completed_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": datetime.now(UTC).isoformat(),
         "model": analysis_model,
     }
 

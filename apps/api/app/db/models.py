@@ -6,7 +6,6 @@ from enum import StrEnum
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
-    Boolean,
     DateTime,
     Float,
     ForeignKey,

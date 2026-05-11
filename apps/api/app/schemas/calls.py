@@ -31,3 +31,9 @@ class CallOut(BaseModel):
     analysis: dict | None
     dynamic_variables: dict
     created_at: datetime
+
+
+class WebCallCreated(CallOut):
+    """Web-call create response includes a short-lived WS session token."""
+    ws_token: str
+    ws_url: str
