@@ -278,11 +278,20 @@ class Pipeline:
     async def cancel_current_turn(self) -> None:
         t = self._turn_task
         if t and not t.done():
-            t.cancel()
+            # Don't try to await ourselves — the on_turn_end callback runs on
+            # the turn task; a self-await would deadlock.
             try:
-                await t
-            except (asyncio.CancelledError, Exception):
-                pass
+                current = asyncio.current_task()
+            except RuntimeError:
+                current = None
+            if t is current:
+                t.cancel()
+            else:
+                t.cancel()
+                try:
+                    await t
+                except (asyncio.CancelledError, Exception):
+                    pass
         self._turn_task = None
 
     async def events(self) -> AsyncIterator[PipelineEvent]:
@@ -293,6 +302,11 @@ class Pipeline:
             yield ev
 
     async def close(self) -> None:
+        """Idempotent shutdown. Safe to call from inside the active turn task
+        (e.g. via an `on_turn_end` callback): the self-cancel path skips the
+        await on the calling task to avoid a deadlock."""
+        if self._closed:
+            return
         self._closed = True
         await self.cancel_current_turn()
         await self._out.put(None)

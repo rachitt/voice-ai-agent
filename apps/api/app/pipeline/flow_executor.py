@@ -30,7 +30,6 @@ next outbound edge with a warning, mirroring the validator's policy.
 """
 from __future__ import annotations
 
-import asyncio
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -210,14 +209,13 @@ class FlowExecutor:
         await self._enter_after(nid)
 
     async def _terminate(self) -> None:
-        """Close the pipeline. Schedules close as a background task so we don't
-        deadlock when called from inside the turn task (turn task can't cancel
-        itself via pipe.close → cancel_current_turn)."""
+        """Close the pipeline. `Pipeline.close` is now self-cancel-safe so this
+        works whether called from the turn task or outside it."""
         if self._closed:
             return
         self._closed = True
         log.info("flow.terminate")
-        asyncio.create_task(self.pipe.close())
+        await self.pipe.close()
 
     async def _speak(self, text: str) -> None:
         # Reuses Pipeline._speak through the public start() path is not available
