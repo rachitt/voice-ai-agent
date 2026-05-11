@@ -43,3 +43,31 @@ class StreamTokenOut(BaseModel):
     token: str
     expires_at: int
     ttl_seconds: int
+
+
+class CallListItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    agent_id: str
+    direction: str
+    status: str
+    from_number: str | None
+    to_number: str | None
+    started_at: datetime | None
+    ended_at: datetime | None
+    duration_ms: int | None
+    has_recording: bool = False
+    created_at: datetime
+
+
+class CallListPage(BaseModel):
+    items: list[CallListItem]
+    next_cursor: str | None = None
+    total: int | None = None
+
+
+class CallDetailOut(CallOut):
+    """Full detail including transcript + provider IDs for the review page."""
+    transcript: list[dict] | None = None
+    provider_call_id: str | None = None
+    phone_number_id: str | None = None

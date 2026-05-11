@@ -19,6 +19,9 @@ from app.pipeline.web_session import (
     verify_sse_token,
 )
 from app.schemas.calls import (
+    CallDetailOut,
+    CallListItem,
+    CallListPage,
     CallOut,
     PhoneCallCreate,
     StreamTokenOut,
@@ -130,7 +133,74 @@ async def create_web_call(
     )
 
 
-@router.get("/{call_id}", response_model=CallOut)
+@router.get("", response_model=CallListPage)
+async def list_calls(
+    db: AsyncSession = Depends(get_db),
+    p: Principal = Depends(require_api_key),
+    agent_id: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    direction: str | None = Query(default=None),
+    has_recording: bool | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    cursor: str | None = Query(
+        default=None,
+        description="Opaque cursor; pass the previous response's next_cursor.",
+    ),
+) -> CallListPage:
+    """List calls in the caller's org, newest first. Cursor is the last seen
+    `created_at` ISO timestamp + id, keyset-paginated so it stays consistent
+    under concurrent inserts."""
+    stmt = select(Call).where(Call.org_id == p.org.id)
+    if agent_id:
+        stmt = stmt.where(Call.agent_id == agent_id)
+    if status_filter:
+        stmt = stmt.where(Call.status == status_filter)
+    if direction:
+        stmt = stmt.where(Call.direction == direction)
+    if has_recording is True:
+        stmt = stmt.where(Call.recording_s3_key.isnot(None))
+    elif has_recording is False:
+        stmt = stmt.where(Call.recording_s3_key.is_(None))
+
+    if cursor:
+        try:
+            import base64
+            from datetime import datetime as _dt
+            padded = cursor + "=" * (-len(cursor) % 4)
+            decoded = base64.urlsafe_b64decode(padded.encode()).decode()
+            ts_str, last_id = decoded.split("|", 1)
+            ts = _dt.fromisoformat(ts_str)
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid cursor") from exc
+        stmt = stmt.where(
+            (Call.created_at < ts)
+            | ((Call.created_at == ts) & (Call.id < last_id))
+        )
+
+    stmt = stmt.order_by(Call.created_at.desc(), Call.id.desc()).limit(limit + 1)
+    rows = (await db.execute(stmt)).scalars().all()
+    has_more = len(rows) > limit
+    page_rows = list(rows[:limit])
+
+    items = [
+        CallListItem.model_validate(
+            {
+                **CallListItem.model_validate(r, from_attributes=True).model_dump(),
+                "has_recording": bool(r.recording_s3_key),
+            }
+        )
+        for r in page_rows
+    ]
+    next_cursor: str | None = None
+    if has_more and page_rows:
+        import base64
+        last = page_rows[-1]
+        raw = f"{last.created_at.isoformat()}|{last.id}"
+        next_cursor = base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
+    return CallListPage(items=items, next_cursor=next_cursor)
+
+
+@router.get("/{call_id}", response_model=CallDetailOut)
 async def get_call(
     call_id: str,
     db: AsyncSession = Depends(get_db),

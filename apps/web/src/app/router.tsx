@@ -5,6 +5,7 @@ import { ConsolePage } from '@/pages/console'
 import { WebCallPage } from '@/pages/web-call'
 import { SignInPage } from '@/pages/signin'
 import { SettingsPage } from '@/pages/settings'
+import { CallsPage } from '@/pages/calls'
 
 const BuilderPage = lazy(() =>
   import('@/pages/builder').then((m) => ({ default: m.BuilderPage })),
@@ -17,6 +18,7 @@ export function AppRouter() {
       <Route element={<Shell />}>
         <Route index element={<ConsolePage />} />
         <Route path="web-call" element={<WebCallPage />} />
+        <Route path="calls" element={<CallsPage />} />
         <Route path="analytics" element={<Placeholder title="Analytics" />} />
         <Route path="numbers" element={<Placeholder title="Numbers" />} />
         <Route path="knowledge" element={<Placeholder title="Knowledge" />} />

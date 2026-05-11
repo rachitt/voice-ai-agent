@@ -164,6 +164,63 @@ export interface ApiKeyCreated extends ApiKeyRow {
   key: string
 }
 
+// --- calls -----------------------------------------------------------------
+
+export interface CallListItem {
+  id: string
+  agent_id: string
+  direction: 'inbound' | 'outbound' | 'web' | string
+  status: string
+  from_number: string | null
+  to_number: string | null
+  started_at: string | null
+  ended_at: string | null
+  duration_ms: number | null
+  has_recording: boolean
+  created_at: string
+}
+
+export interface CallListPage {
+  items: CallListItem[]
+  next_cursor: string | null
+  total: number | null
+}
+
+export interface CallDetail extends CallListItem {
+  transcript: { role?: string; who?: string; text?: string }[] | null
+  provider_call_id: string | null
+  phone_number_id: string | null
+  analysis: Record<string, unknown> | null
+  dynamic_variables: Record<string, unknown>
+  recording_s3_key: string | null
+}
+
+export const calls = {
+  list: (opts: { limit?: number; cursor?: string; agent_id?: string; has_recording?: boolean } = {}) => {
+    const qs = new URLSearchParams()
+    if (opts.limit) qs.set('limit', String(opts.limit))
+    if (opts.cursor) qs.set('cursor', opts.cursor)
+    if (opts.agent_id) qs.set('agent_id', opts.agent_id)
+    if (opts.has_recording !== undefined) qs.set('has_recording', String(opts.has_recording))
+    const tail = qs.toString() ? `?${qs.toString()}` : ''
+    return req<CallListPage>(`/v1/calls${tail}`)
+  },
+  get: (id: string) => req<CallDetail>(`/v1/calls/${encodeURIComponent(id)}`),
+  // Audio elements can't carry an Authorization header. Fetch the WAV as a
+  // blob (with Bearer auth) and let the caller turn it into an object URL.
+  recordingBlob: async (id: string): Promise<Blob> => {
+    const r = await fetch(
+      `${getApiBase()}/v1/calls/${encodeURIComponent(id)}/recording`,
+      { headers: { authorization: `Bearer ${getApiKey()}` } },
+    )
+    if (!r.ok) {
+      const body = await r.text().catch(() => '')
+      throw new Error(`${r.status} ${r.statusText} ${body}`)
+    }
+    return await r.blob()
+  },
+}
+
 export const apiKeys = {
   list: () => sessionReq<ApiKeyRow[]>(`/v1/api-keys`),
   create: (name: string) =>
