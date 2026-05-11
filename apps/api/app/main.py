@@ -9,6 +9,7 @@ from app.routers import (
     agents,
     auth_oauth,
     calls,
+    console,
     knowledge_bases,
     phone_numbers,
     squads,
@@ -53,6 +54,7 @@ def create_app() -> FastAPI:
     app.include_router(telnyx_media_ws.router)
     app.include_router(webhooks.router)
     app.include_router(auth_oauth.router)
+    app.include_router(console.router)
 
     return app
 

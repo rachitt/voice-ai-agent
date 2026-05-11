@@ -1,8 +1,9 @@
 import { Check, Sparkles, Phone, BookOpen, AudioLines, Shield, Wrench, Rocket } from 'lucide-react'
 import { CHECKLIST, type ChecklistStep } from './fixtures'
+import { useConsoleSummary } from './useSummary'
 import { cn } from '@/lib/cn'
 
-const ICON: Record<ChecklistStep['key'], React.ComponentType<{ className?: string }>> = {
+const ICON: Record<string, React.ComponentType<{ className?: string }>> = {
   phone: Phone,
   kb: BookOpen,
   voice: AudioLines,
@@ -12,19 +13,26 @@ const ICON: Record<ChecklistStep['key'], React.ComponentType<{ className?: strin
 }
 
 export function DeploymentChecklist() {
+  const { data } = useConsoleSummary()
+  const steps: ChecklistStep[] = (data?.checklist as ChecklistStep[] | undefined) ?? CHECKLIST
   return (
     <div className="panel px-5 py-4" data-testid="checklist">
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-accent" />
           <div className="text-sm font-medium">Deployment Checklist</div>
+          {!data && (
+            <span className="chip" data-testid="checklist-demo">
+              demo
+            </span>
+          )}
         </div>
         <button className="text-xs text-accent hover:underline">View runbook</button>
       </div>
 
       <ol className="grid grid-cols-6 gap-1">
-        {CHECKLIST.map((s, i) => (
-          <Step key={s.key} step={s} isLast={i === CHECKLIST.length - 1} />
+        {steps.map((s, i) => (
+          <Step key={s.key} step={s} isLast={i === steps.length - 1} />
         ))}
       </ol>
     </div>

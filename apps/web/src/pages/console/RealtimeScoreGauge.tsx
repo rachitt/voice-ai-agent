@@ -1,15 +1,27 @@
 import { RadialBar, RadialBarChart, ResponsiveContainer, PolarAngleAxis } from 'recharts'
 import { SCORE_BREAKDOWN } from './fixtures'
+import { useConsoleSummary } from './useSummary'
 
 export function RealtimeScoreGauge() {
-  const score = 92
+  const { data: summary } = useConsoleSummary()
+  const breakdown = (summary?.score_breakdown as typeof SCORE_BREAKDOWN | undefined) ?? SCORE_BREAKDOWN
+  const score = breakdown.length
+    ? Math.round(breakdown.reduce((acc, b) => acc + b.value, 0) / breakdown.length)
+    : 0
   const data = [{ name: 'score', value: score, fill: '#22e07a' }]
 
   return (
     <div className="panel px-5 py-4" data-testid="score-gauge">
       <div className="flex items-center justify-between">
-        <div className="text-sm font-medium">Realtime Score</div>
-        <span className="chip">live · 5s window</span>
+        <div className="flex items-center gap-2">
+          <div className="text-sm font-medium">Realtime Score</div>
+          {!summary && (
+            <span className="chip" data-testid="score-demo">
+              demo
+            </span>
+          )}
+        </div>
+        <span className="chip">last 7d</span>
       </div>
 
       <div className="mt-2 flex items-center gap-4">
@@ -35,7 +47,7 @@ export function RealtimeScoreGauge() {
         </div>
 
         <ul className="grid flex-1 grid-cols-1 gap-1.5">
-          {SCORE_BREAKDOWN.map((b) => (
+          {breakdown.map((b) => (
             <li key={b.key} className="flex items-center justify-between text-[11px]">
               <span className="text-muted">{b.label}</span>
               <span className="font-mono text-fg">{b.value}</span>

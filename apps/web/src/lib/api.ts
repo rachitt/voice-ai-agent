@@ -129,6 +129,43 @@ export const api = {
     req<StreamToken>(`/v1/calls/${encodeURIComponent(callId)}/stream-token`, {
       method: 'POST',
     }),
+  consoleSummary: () => req<ConsoleSummary>(`/v1/console/summary`),
+}
+
+// --- console summary -------------------------------------------------------
+
+export interface ConsoleChecklistStep {
+  key: string
+  label: string
+  status: 'done' | 'current' | 'todo'
+}
+export interface ConsoleSummary {
+  checklist: ConsoleChecklistStep[]
+  today: {
+    calls: number
+    completed: number
+    failed: number
+    avg_duration_ms: number
+    calls_delta_vs_yesterday: number
+  }
+  recent_tool_calls: {
+    id: string
+    name: string
+    status: 'success' | 'failed' | 'pending'
+    call_id: string
+    at: string
+  }[]
+  launch_history: {
+    id: string
+    version: string
+    env: string
+    date: string
+    agent_id: string
+    agent_name: string
+    status: 'live' | 'archived' | 'rolled-back'
+  }[]
+  score_breakdown: { key: string; label: string; value: number }[]
+  compliance: { key: string; label: string; status: 'ok' | 'warn' | 'off' }[]
 }
 
 export interface StreamToken {

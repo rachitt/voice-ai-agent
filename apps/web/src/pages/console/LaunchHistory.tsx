@@ -1,5 +1,6 @@
 import { History } from 'lucide-react'
 import { LAUNCH_HISTORY } from './fixtures'
+import { useConsoleSummary } from './useSummary'
 import { cn } from '@/lib/cn'
 
 const STATUS_TINT = {
@@ -9,17 +10,28 @@ const STATUS_TINT = {
 } as const
 
 export function LaunchHistory() {
+  const { data } = useConsoleSummary()
+  const items =
+    (data?.launch_history as typeof LAUNCH_HISTORY | undefined) ?? LAUNCH_HISTORY
   return (
     <div className="panel px-5 py-4" data-testid="launch-history">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <History className="h-4 w-4 text-muted" />
           <div className="text-sm font-medium">Launch History</div>
+          {!data && (
+            <span className="chip" data-testid="launch-history-demo">
+              demo
+            </span>
+          )}
         </div>
         <button className="text-[11px] text-muted hover:text-fg">All →</button>
       </div>
       <ul className="flex flex-col">
-        {LAUNCH_HISTORY.map((h, i) => (
+        {items.length === 0 ? (
+          <li className="py-2 text-[11px] text-muted">No launches yet.</li>
+        ) : null}
+        {items.map((h, i) => (
           <li
             key={h.id}
             className={cn(

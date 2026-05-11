@@ -1,19 +1,27 @@
 import { ShieldCheck } from 'lucide-react'
 import { COMPLIANCE } from './fixtures'
+import { useConsoleSummary } from './useSummary'
 import { cn } from '@/lib/cn'
 
 export function ComplianceSafety() {
+  const { data } = useConsoleSummary()
+  const items = (data?.compliance as typeof COMPLIANCE | undefined) ?? COMPLIANCE
   return (
     <div className="panel px-5 py-4" data-testid="compliance">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-accent" />
           <div className="text-sm font-medium">Compliance & Safety</div>
+          {!data && (
+            <span className="chip" data-testid="compliance-demo">
+              demo
+            </span>
+          )}
         </div>
         <span className="text-[11px] text-muted">SOC2 · CCPA</span>
       </div>
       <ul className="grid grid-cols-2 gap-1.5">
-        {COMPLIANCE.map((c) => (
+        {items.map((c) => (
           <li
             key={c.key}
             className="flex items-center justify-between rounded-[8px] border border-border bg-panel-2 px-2.5 py-1.5"

@@ -1,15 +1,35 @@
 import { TOOL_CALLS, type ToolCall } from './fixtures'
+import { useConsoleSummary } from './useSummary'
 import { cn } from '@/lib/cn'
 
 export function ToolCallsPanel() {
+  const { data } = useConsoleSummary()
+  const calls: ToolCall[] = data
+    ? data.recent_tool_calls.map((t) => ({
+        id: t.id,
+        name: t.name,
+        status: t.status,
+        ms: 0,
+      }))
+    : TOOL_CALLS
   return (
     <div className="panel px-5 py-4" data-testid="tool-calls">
       <div className="mb-3 flex items-center justify-between">
-        <div className="text-sm font-medium">Tool Calls</div>
-        <span className="text-[11px] text-muted">last 60s</span>
+        <div className="flex items-center gap-2">
+          <div className="text-sm font-medium">Tool Calls</div>
+          {!data && (
+            <span className="chip" data-testid="tool-calls-demo">
+              demo
+            </span>
+          )}
+        </div>
+        <span className="text-[11px] text-muted">{data ? 'recent' : 'last 60s'}</span>
       </div>
       <ul className="flex flex-col gap-1">
-        {TOOL_CALLS.map((t) => (
+        {calls.length === 0 && (
+          <li className="px-2 py-1.5 text-[11px] text-muted">No tool calls yet.</li>
+        )}
+        {calls.map((t) => (
           <Row key={t.id} call={t} />
         ))}
       </ul>
