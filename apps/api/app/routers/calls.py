@@ -144,6 +144,39 @@ async def get_call(
     return call
 
 
+@router.get("/{call_id}/recording")
+async def get_call_recording(
+    call_id: str,
+    db: AsyncSession = Depends(get_db),
+    p: Principal = Depends(require_api_key),
+) -> "StreamingResponse":
+    """Stream the call's WAV recording bytes from object storage."""
+    call = (
+        await db.execute(select(Call).where(Call.id == call_id, Call.org_id == p.org.id))
+    ).scalar_one_or_none()
+    if not call:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "call not found")
+    if not call.recording_s3_key:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no recording for this call")
+    from app.storage.s3 import get_object_bytes  # local import: storage is optional
+
+    try:
+        data = await get_object_bytes(
+            bucket=get_settings().s3_bucket_recordings, key=call.recording_s3_key
+        )
+    except Exception as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"recording fetch failed: {exc}") from exc
+
+    async def _iter():
+        yield data
+
+    return StreamingResponse(
+        _iter(),
+        media_type="audio/wav",
+        headers={"Content-Disposition": f'attachment; filename="{call.id}.wav"'},
+    )
+
+
 async def _principal_via_bearer(
     authorization: str | None,
     db: AsyncSession,

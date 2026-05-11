@@ -22,14 +22,17 @@ from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.logging import log
 from app.db.models import Call, CallEvent, CallStatus
 from app.db.session import SessionLocal
 from app.pipeline import event_bus
 from app.pipeline.orchestrator import AgentConfig, Pipeline, PipelineEvent, ToolCall
+from app.pipeline.recording import CallRecorder, recording_key
 from app.pipeline.stt import DeepgramStream
 from app.pipeline.web_session import verify_ws_token
 from app.routers.web_call_ws import _build_agent_config  # reuse
+from app.storage.s3 import put_object_bytes
 from app.telephony.audio import pcm16_16k_to_ulaw, ulaw_to_pcm16_16k
 from app.telephony.telnyx import TelnyxClient
 from app.tools.builtins import REGISTRY, ToolContext
@@ -92,6 +95,7 @@ async def _run_pstn_session(ws: WebSocket, db: AsyncSession, call: Call, cfg: Ag
             return {"error": "tool_failed", "detail": str(exc)}
 
     pipe = Pipeline(cfg, tool_dispatch=tool_dispatch)
+    recorder = CallRecorder(sample_rate=cfg.sample_rate)
     transcript_log: list[dict] = []
     stream_id: str | None = None
 
@@ -118,6 +122,8 @@ async def _run_pstn_session(ws: WebSocket, db: AsyncSession, call: Call, cfg: Ag
 
     async def _drain_pipeline() -> None:
         async for ev in pipe.events():
+            if ev.kind == "agent_audio" and ev.audio:
+                recorder.push_agent(ev.audio)
             await _emit_pstn(ws, ev, stream_id, call.id, transcript_log)
 
     drainer = asyncio.create_task(_drain_pipeline())
@@ -144,6 +150,7 @@ async def _run_pstn_session(ws: WebSocket, db: AsyncSession, call: Call, cfg: Ag
                 except Exception as exc:
                     log.warning("telnyx.decode.err", err=str(exc))
                     continue
+                recorder.push_user(pcm)
                 await stt.push(pcm)
             elif evt == "stop":
                 break
@@ -159,6 +166,7 @@ async def _run_pstn_session(ws: WebSocket, db: AsyncSession, call: Call, cfg: Ag
         await pipe.close()
         drainer.cancel()
         event_bus.close(call.id)
+        await _upload_recording(call, recorder)
         await _finalise(db, call, transcript_log)
         await telnyx.aclose()
         try:
@@ -196,6 +204,30 @@ async def _emit_pstn(
             transcript_log.append({"role": "assistant", "text": ev.text})
     except Exception as exc:
         log.warning("telnyx.emit.err", err=str(exc))
+
+
+async def _upload_recording(call: Call, recorder: CallRecorder) -> None:
+    """Same best-effort upload pattern as the web bridge."""
+    if not get_settings().enable_object_store:
+        return
+    if not recorder.has_audio():
+        return
+    try:
+        wav_bytes = recorder.finalise()
+    except Exception as exc:
+        log.warning("telnyx.recording.encode_err", call=call.id, err=str(exc))
+        return
+    if not wav_bytes:
+        return
+    key = recording_key(org_id=call.org_id, call_id=call.id)
+    stored = await put_object_bytes(
+        bucket=get_settings().s3_bucket_recordings,
+        key=key,
+        data=wav_bytes,
+        content_type="audio/wav",
+    )
+    if stored:
+        call.recording_s3_key = stored
 
 
 async def _finalise(db: AsyncSession, call: Call, transcript: list[dict]) -> None:

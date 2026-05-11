@@ -28,10 +28,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import log
 from app.db.models import AgentVersion, Call, CallEvent, CallStatus
 from app.db.session import SessionLocal
+from app.core.config import get_settings
 from app.pipeline import event_bus
 from app.pipeline.orchestrator import AgentConfig, Pipeline, PipelineEvent, ToolCall
+from app.pipeline.recording import CallRecorder, recording_key
 from app.pipeline.stt import DeepgramStream
 from app.pipeline.web_session import verify_ws_token
+from app.storage.s3 import put_object_bytes
 from app.tools.builtins import REGISTRY, ToolContext
 
 router = APIRouter(prefix="/v1/calls", tags=["calls"])
@@ -176,6 +179,7 @@ async def _run_session(
             return {"error": "tool_failed", "detail": str(exc)}
 
     pipe = Pipeline(cfg, tool_dispatch=tool_dispatch)
+    recorder = CallRecorder(sample_rate=cfg.sample_rate)
 
     stt_stream: DeepgramStream | None = None
     stt_pusher_task: asyncio.Task | None = None
@@ -212,6 +216,8 @@ async def _run_session(
 
     async def _drain_pipeline() -> None:
         async for ev in pipe.events():
+            if ev.kind == "agent_audio" and ev.audio:
+                recorder.push_agent(ev.audio)
             await _emit(ws, ev, transcript_log, call.id)
 
     drainer = asyncio.create_task(_drain_pipeline())
@@ -223,6 +229,7 @@ async def _run_session(
             if msg["type"] == "websocket.disconnect":
                 break
             if "bytes" in msg and msg["bytes"] is not None:
+                recorder.push_user(msg["bytes"])
                 if stt_stream is not None:
                     await stt_stream.push(msg["bytes"])
                 continue
@@ -253,6 +260,7 @@ async def _run_session(
         await pipe.close()
         drainer.cancel()
         event_bus.close(call.id)
+        await _upload_recording(call, recorder)
         await _finalise_call(db, call, transcript_log)
         try:
             await ws.close()
@@ -280,6 +288,32 @@ async def _emit(ws: WebSocket, ev: PipelineEvent, log_buf: list[dict], call_id: 
             log_buf.append({"role": "assistant", "text": ev.text})
     except Exception as exc:
         log.warning("ws.emit.error", err=str(exc))
+
+
+async def _upload_recording(call: Call, recorder: CallRecorder) -> None:
+    """Encode the in-memory PCM buffers to WAV and upload to S3. Best-effort:
+    if `enable_object_store` is off or upload fails, leaves recording_s3_key
+    untouched so the call still finalises."""
+    if not get_settings().enable_object_store:
+        return
+    if not recorder.has_audio():
+        return
+    try:
+        wav_bytes = recorder.finalise()
+    except Exception as exc:
+        log.warning("ws.recording.encode_err", call=call.id, err=str(exc))
+        return
+    if not wav_bytes:
+        return
+    key = recording_key(org_id=call.org_id, call_id=call.id)
+    stored = await put_object_bytes(
+        bucket=get_settings().s3_bucket_recordings,
+        key=key,
+        data=wav_bytes,
+        content_type="audio/wav",
+    )
+    if stored:
+        call.recording_s3_key = stored
 
 
 async def _finalise_call(db: AsyncSession, call: Call, transcript: list[dict]) -> None:
