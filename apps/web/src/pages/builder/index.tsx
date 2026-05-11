@@ -1,9 +1,18 @@
+import { useParams } from 'react-router-dom'
+import { BuilderTopbar } from './BuilderTopbar'
+import { StepPalette } from './StepPalette'
+import { FlowCanvas } from './FlowCanvas'
+import { NodeInspector } from './NodeInspector'
+
 export function BuilderPage() {
+  const { agentId = 'demo' } = useParams()
   return (
-    <div className="grid h-screen w-screen place-items-center bg-bg text-muted">
-      <div className="text-center">
-        <div className="text-lg text-fg">Agent Builder</div>
-        <p className="mt-1 text-sm">Page lands in feat/builder worktree.</p>
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-bg text-fg">
+      <BuilderTopbar agentId={agentId} />
+      <div className="flex min-h-0 flex-1">
+        <StepPalette />
+        <FlowCanvas />
+        <NodeInspector />
       </div>
     </div>
   )
