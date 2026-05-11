@@ -2,7 +2,6 @@ import {
   Background,
   BackgroundVariant,
   Controls,
-  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
@@ -76,15 +75,6 @@ function InnerCanvas() {
         <Controls
           className="!rounded-[10px] !border !border-border !bg-panel"
           showInteractive={false}
-        />
-        <MiniMap
-          pannable
-          zoomable
-          maskColor="#0b0f0ecc"
-          nodeColor={(n: StepNode) =>
-            n.id === useBuilder.getState().selectedId ? '#22e07a' : '#1e2624'
-          }
-          className="!rounded-[10px] !border !border-border !bg-panel"
         />
       </ReactFlow>
     </div>
