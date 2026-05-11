@@ -11,6 +11,7 @@ from app.kb.loaders import UnsupportedSourceError, detect_kind, extract_text
 from app.kb.store import ingest_source_text
 from app.schemas.knowledge_bases import KbCreate, KbOut, KbSourceCreate, KbSourceOut
 from app.storage.s3 import put_object_bytes
+from app.workers.kb_ingest import enqueue_kb_ingest
 
 router = APIRouter(prefix="/v1/knowledge-bases", tags=["knowledge-bases"])
 
@@ -102,18 +103,16 @@ async def upload_source(
     if not data:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "empty file")
 
-    try:
-        text = extract_text(data, kind=kind)
-    except Exception as exc:
-        log.exception("kb.extract.err", err=str(exc))
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"extract failed: {exc}") from exc
+    settings = get_settings()
+    use_async = settings.enable_async_kb_ingest and settings.enable_object_store
 
-    src = KbSource(kb_id=kb_id, name=name, kind=kind, status="ingesting")
+    src = KbSource(
+        kb_id=kb_id, name=name, kind=kind, status="queued" if use_async else "ingesting"
+    )
     db.add(src)
     await db.commit()
     await db.refresh(src)
 
-    settings = get_settings()
     s3_key = await put_object_bytes(
         bucket=settings.s3_bucket_kb,
         key=f"kb/{kb_id}/{src.id}/{name}",
@@ -124,6 +123,25 @@ async def upload_source(
         src.s3_key = s3_key
         await db.commit()
         await db.refresh(src)
+
+    if use_async:
+        if not s3_key:
+            src.status = "error"
+            src.error = "object store upload failed; cannot async-ingest"
+            await db.commit()
+            await db.refresh(src)
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                "object store upload failed; cannot async-ingest",
+            )
+        await enqueue_kb_ingest(src.id)
+        return src
+
+    try:
+        text = extract_text(data, kind=kind)
+    except Exception as exc:
+        log.exception("kb.extract.err", err=str(exc))
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"extract failed: {exc}") from exc
 
     try:
         await ingest_source_text(

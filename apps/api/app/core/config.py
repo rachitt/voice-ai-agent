@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     s3_bucket_kb: str = Field("voice-kb")
     s3_region: str = Field("us-east-1")
     enable_object_store: bool = Field(False)
+    enable_async_kb_ingest: bool = Field(False)
 
     livekit_url: str = Field("ws://localhost:7880")
     livekit_api_key: str = Field("devkey")

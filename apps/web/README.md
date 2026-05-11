@@ -1,73 +1,73 @@
-# React + TypeScript + Vite
+# Soniq Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React frontend for Soniq.
 
-Currently, two official plugins are available:
+The web app provides the first product surfaces for building and testing voice
+agents: a launch console, a visual flow builder, and a browser-based call test
+page that connects to the Soniq API over HTTP and WebSockets.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Stack
 
-## React Compiler
+- Vite
+- React
+- TypeScript
+- Tailwind CSS
+- React Router
+- React Flow
+- Zustand
+- Recharts
+- lucide-react
+- Playwright
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Local Development
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+pnpm install
+pnpm dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+The app runs at `http://localhost:5173` by default.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+To point the app at a running API, open the browser web-call page and set:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- API base: `http://localhost:8000`
+- API key: the key printed by `apps/api/scripts/seed_dev.py`
+
+## Routes
+
+- `/` launch console
+- `/builder/:agentId` visual agent builder
+- `/builder` redirects to `/builder/demo`
+- `/web-call` browser call testing
+- `/analytics`, `/numbers`, `/knowledge`, `/tools`, `/settings` placeholder
+  product sections
+
+## Testing
+
+```bash
+pnpm build
+pnpm test:e2e
+```
+
+The Playwright suite covers console rendering, builder interactions, graph
+editing, validation behavior, API-backed persistence, publish errors, and test
+call creation.
+
+## Layout
+
+```text
+src/app
+  router and shell
+
+src/lib
+  API client, websocket call client, utilities
+
+src/pages/console
+  launch console panels and fixtures
+
+src/pages/builder
+  React Flow canvas, node palette, inspector, store, validation rules
+
+src/pages/web-call
+  browser call testing UI
 ```

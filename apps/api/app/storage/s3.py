@@ -51,6 +51,12 @@ def _put_sync(bucket: str, key: str, data: bytes, content_type: str) -> None:
     client.put_object(Bucket=bucket, Key=key, Body=data, ContentType=content_type)
 
 
+def _get_sync(bucket: str, key: str) -> bytes:
+    client = get_s3_client()
+    obj = client.get_object(Bucket=bucket, Key=key)
+    return obj["Body"].read()
+
+
 async def put_object_bytes(
     *, bucket: str, key: str, data: bytes, content_type: str = "application/octet-stream"
 ) -> str | None:
@@ -66,3 +72,8 @@ async def put_object_bytes(
     except Exception as exc:
         log.warning("s3.put_object.err", bucket=bucket, key=key, err=str(exc))
         return None
+
+
+async def get_object_bytes(*, bucket: str, key: str) -> bytes:
+    """Fetch object bytes. Raises on failure — caller must handle."""
+    return await asyncio.to_thread(_get_sync, bucket, key)
