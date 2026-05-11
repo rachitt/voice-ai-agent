@@ -8,14 +8,17 @@ export function LiveTranscript() {
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    let i = 0
     const id = setInterval(() => {
-      if (i >= STREAM_TRANSCRIPT.length) {
-        clearInterval(id)
-        return
-      }
-      setLines((prev) => [...prev, STREAM_TRANSCRIPT[i]])
-      i++
+      setLines((prev) => {
+        const nextIdx = prev.length - SEED_TRANSCRIPT.length
+        const next = STREAM_TRANSCRIPT[nextIdx]
+        if (!next) {
+          clearInterval(id)
+          return prev
+        }
+        if (prev.some((l) => l.id === next.id)) return prev
+        return [...prev, next]
+      })
     }, 2200)
     return () => clearInterval(id)
   }, [])
