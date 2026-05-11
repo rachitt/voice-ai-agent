@@ -35,6 +35,23 @@ async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await res.json()) as T
 }
 
+async function sessionReq<T>(path: string, init: RequestInit = {}): Promise<T | null> {
+  const res = await fetch(`${getApiBase()}${path}`, {
+    ...init,
+    credentials: 'include',
+    headers: {
+      'content-type': 'application/json',
+      ...(init.headers || {}),
+    },
+  })
+  if (res.status === 204) return null
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`${res.status} ${res.statusText} ${body}`)
+  }
+  return (await res.json()) as T
+}
+
 // --- types -----------------------------------------------------------------
 
 export interface AgentSummary {
@@ -130,6 +147,32 @@ export const api = {
       method: 'POST',
     }),
   consoleSummary: () => req<ConsoleSummary>(`/v1/console/summary`),
+}
+
+// --- api keys (dashboard / session auth) -----------------------------------
+
+export interface ApiKeyRow {
+  id: string
+  name: string
+  prefix: string
+  last_used_at: string | null
+  revoked_at: string | null
+  created_at: string
+}
+
+export interface ApiKeyCreated extends ApiKeyRow {
+  key: string
+}
+
+export const apiKeys = {
+  list: () => sessionReq<ApiKeyRow[]>(`/v1/api-keys`),
+  create: (name: string) =>
+    sessionReq<ApiKeyCreated>(`/v1/api-keys`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+  revoke: (id: string) =>
+    sessionReq<null>(`/v1/api-keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 }
 
 // --- console summary -------------------------------------------------------

@@ -4,6 +4,7 @@ import { ConsolePage } from '@/pages/console'
 import { BuilderPage } from '@/pages/builder'
 import { WebCallPage } from '@/pages/web-call'
 import { SignInPage } from '@/pages/signin'
+import { SettingsPage } from '@/pages/settings'
 
 export function AppRouter() {
   return (
@@ -16,7 +17,7 @@ export function AppRouter() {
         <Route path="numbers" element={<Placeholder title="Numbers" />} />
         <Route path="knowledge" element={<Placeholder title="Knowledge" />} />
         <Route path="tools" element={<Placeholder title="Tools" />} />
-        <Route path="settings" element={<Placeholder title="Settings" />} />
+        <Route path="settings" element={<SettingsPage />} />
       </Route>
       <Route path="builder/:agentId" element={<BuilderPage />} />
       <Route path="builder" element={<Navigate to="/builder/demo" replace />} />

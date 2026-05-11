@@ -1,12 +1,14 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.security import hash_api_key
-from app.db.models import ApiKey, Org
+from app.core.sessions import verify_session
+from app.db.models import ApiKey, Org, User
 from app.db.session import get_db
 
 
@@ -14,6 +16,12 @@ from app.db.session import get_db
 class Principal:
     org: Org
     api_key: ApiKey
+
+
+@dataclass
+class SessionPrincipal:
+    user: User
+    org: Org
 
 
 async def require_api_key(
@@ -43,3 +51,25 @@ async def require_api_key(
     )
     await db.commit()
     return Principal(org=org, api_key=api_key)
+
+
+async def require_session(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> SessionPrincipal:
+    """Resolve session cookie → (User, Org). Used by dashboard routes that
+    must not accept long-lived API keys for self-management."""
+    s = get_settings()
+    raw = request.cookies.get(s.session_cookie_name)
+    if not raw:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "no session")
+    claims = verify_session(raw)
+    if not claims:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid session")
+    user = await db.get(User, claims["sub"])
+    if not user:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user gone")
+    org = await db.get(Org, user.org_id)
+    if not org:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "org gone")
+    return SessionPrincipal(user=user, org=org)
