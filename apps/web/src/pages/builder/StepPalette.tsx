@@ -66,6 +66,7 @@ const REAL_KINDS = new Set([
   'condition',
   'transfer',
   'voicemail',
+  'kb_lookup',
   'end',
 ])
 

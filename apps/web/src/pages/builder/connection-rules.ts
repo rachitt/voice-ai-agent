@@ -33,6 +33,7 @@ export const RULES: Record<StepKind, KindRule> = {
   },
   transfer: { inAllowed: true, outMax: 1, outNeedsLabel: false, terminal: false, root: false },
   voicemail: { inAllowed: true, outMax: 0, outNeedsLabel: false, terminal: true, root: false },
+  kb_lookup: { inAllowed: true, outMax: 1, outNeedsLabel: false, terminal: false, root: false },
   end: { inAllowed: true, outMax: 0, outNeedsLabel: false, terminal: true, root: false },
 }
 

@@ -25,6 +25,7 @@ test.describe('Agent Builder', () => {
       'condition',
       'transfer',
       'voicemail',
+      'kb_lookup',
       'end',
       'sheets',
       'salesforce',

@@ -18,6 +18,7 @@ StepKind = Literal[
     "condition",
     "transfer",
     "voicemail",
+    "kb_lookup",
     "end",
 ]
 
@@ -41,6 +42,7 @@ RULES: dict[str, KindRule] = {
     ),
     "transfer": KindRule(in_allowed=True, out_max=1),
     "voicemail": KindRule(in_allowed=True, out_max=0, terminal=True),
+    "kb_lookup": KindRule(in_allowed=True, out_max=1),
     "end": KindRule(in_allowed=True, out_max=0, terminal=True),
 }
 

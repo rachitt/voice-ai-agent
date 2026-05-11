@@ -7,6 +7,7 @@ export const PALETTE: PaletteItem[] = [
   { kind: 'condition', group: 'core', title: 'Condition', subtitle: 'Branch on values' },
   { kind: 'transfer', group: 'core', title: 'Transfer', subtitle: 'Hand off to human' },
   { kind: 'voicemail', group: 'core', title: 'Voicemail', subtitle: 'Leave a message' },
+  { kind: 'kb_lookup', group: 'core', title: 'Knowledge Base', subtitle: 'Retrieve docs by query' },
   { kind: 'end', group: 'core', title: 'End Call', subtitle: 'Hang up gracefully' },
   { kind: 'sheets', group: 'integrations', title: 'Google Sheets', subtitle: 'Append a row' },
   { kind: 'salesforce', group: 'integrations', title: 'Salesforce', subtitle: 'Upsert lead' },

@@ -118,6 +118,7 @@ const TITLES: Record<StepKind, string> = {
   condition: 'Condition',
   transfer: 'Transfer',
   voicemail: 'Voicemail',
+  kb_lookup: 'Knowledge Base',
   end: 'End Call',
 }
 

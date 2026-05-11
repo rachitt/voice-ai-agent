@@ -7,6 +7,7 @@ export type StepKind =
   | 'condition'
   | 'transfer'
   | 'voicemail'
+  | 'kb_lookup'
   | 'end'
 
 export type RetryPolicy = 'none' | 'linear' | 'exponential'
@@ -23,6 +24,9 @@ export type StepData = {
   retry?: RetryPolicy
   sample?: string
   branchLabel?: string
+  kb_id?: string
+  query_template?: string
+  top_k?: number
 }
 
 export type StepNode = Node<StepData, 'step'>

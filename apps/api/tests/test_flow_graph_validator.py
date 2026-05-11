@@ -32,6 +32,34 @@ def test_validator_accepts_linear_graph():
     assert not res.warnings
 
 
+def test_validator_accepts_kb_lookup_node():
+    graph = {
+        "nodes": [
+            _node("g", "greeting"),
+            _node("kb", "kb_lookup"),
+            _node("end", "end"),
+        ],
+        "edges": [_edge("g", "kb"), _edge("kb", "end")],
+    }
+    res = validate_flow_graph(graph)
+    assert res.ok, res.errors
+
+
+def test_validator_rejects_kb_lookup_with_two_outbound():
+    graph = {
+        "nodes": [
+            _node("g", "greeting"),
+            _node("kb", "kb_lookup"),
+            _node("a", "end"),
+            _node("b", "end"),
+        ],
+        "edges": [_edge("g", "kb"), _edge("kb", "a"), _edge("kb", "b")],
+    }
+    res = validate_flow_graph(graph)
+    assert not res.ok
+    assert any("outbound" in e and "kb_lookup" in e for e in res.errors)
+
+
 def test_validator_rejects_missing_greeting():
     graph = {"nodes": [_node("c", "collect"), _node("end", "end")], "edges": [_edge("c", "end")]}
     res = validate_flow_graph(graph)
