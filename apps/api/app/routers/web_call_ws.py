@@ -30,6 +30,7 @@ from app.db.models import AgentVersion, Call, CallEvent, CallStatus
 from app.db.session import SessionLocal
 from app.core.config import get_settings
 from app.pipeline import event_bus
+from app.pipeline.flow_executor import FlowExecutor, has_executable_graph
 from app.pipeline.orchestrator import AgentConfig, Pipeline, PipelineEvent, ToolCall
 from app.pipeline.recording import CallRecorder, recording_key
 from app.pipeline.stt import DeepgramStream
@@ -109,6 +110,7 @@ async def _build_agent_config(db: AsyncSession, call: Call) -> AgentConfig | Non
         first_message=ver.first_message,
         tools=tool_defs,
         knowledge_base_ids=list(ver.knowledge_base_ids or []),
+        flow_graph=ver.flow_graph if isinstance(ver.flow_graph, dict) else None,
     )
 
 
@@ -222,8 +224,29 @@ async def _run_session(
 
     drainer = asyncio.create_task(_drain_pipeline())
 
+    async def _kb_call(kb_id: str, query: str, top_k: int = 5) -> dict[str, Any]:
+        entry = REGISTRY.get("kb_lookup")
+        if not entry:
+            return {"error": "kb_lookup_unavailable"}
+        ctx = ToolContext(
+            call=call, db=db, telnyx=None,
+            args={"kb_id": kb_id, "query": query, "top_k": top_k},
+            knowledge_base_ids=list(cfg.knowledge_base_ids or []),
+            embedding_model=cfg.embedding_model,
+        )
+        return await entry["handler"](ctx)
+
+    flow: FlowExecutor | None = None
+    if has_executable_graph(cfg.flow_graph):
+        flow = FlowExecutor(
+            graph=cfg.flow_graph or {}, cfg=cfg, pipe=pipe, kb_dispatch=_kb_call
+        )
+
     try:
-        await pipe.start()
+        if flow is not None:
+            await flow.start()
+        else:
+            await pipe.start()
         while True:
             msg = await ws.receive()
             if msg["type"] == "websocket.disconnect":

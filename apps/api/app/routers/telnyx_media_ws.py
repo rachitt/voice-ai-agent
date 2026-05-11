@@ -28,6 +28,7 @@ from app.db.models import Call, CallEvent, CallStatus
 from app.db.session import SessionLocal
 from app.pipeline import event_bus
 from app.pipeline.orchestrator import AgentConfig, Pipeline, PipelineEvent, ToolCall
+from app.pipeline.flow_executor import FlowExecutor, has_executable_graph
 from app.pipeline.recording import CallRecorder, recording_key
 from app.pipeline.stt import DeepgramStream
 from app.pipeline.web_session import verify_ws_token
@@ -128,8 +129,36 @@ async def _run_pstn_session(ws: WebSocket, db: AsyncSession, call: Call, cfg: Ag
 
     drainer = asyncio.create_task(_drain_pipeline())
 
+    async def _kb_call(kb_id: str, query: str, top_k: int = 5) -> dict[str, Any]:
+        entry = REGISTRY.get("kb_lookup")
+        if not entry:
+            return {"error": "kb_lookup_unavailable"}
+        ctx = ToolContext(
+            call=call, db=db, telnyx=telnyx,
+            args={"kb_id": kb_id, "query": query, "top_k": top_k},
+            knowledge_base_ids=list(cfg.knowledge_base_ids or []),
+            embedding_model=cfg.embedding_model,
+        )
+        return await entry["handler"](ctx)
+
+    async def _transfer(*, to: str, summary: str = "") -> None:
+        if telnyx and call.provider_call_id:
+            await telnyx.transfer(
+                call.provider_call_id, to=to, from_=call.from_number or to
+            )
+
+    flow: FlowExecutor | None = None
+    if has_executable_graph(cfg.flow_graph):
+        flow = FlowExecutor(
+            graph=cfg.flow_graph or {}, cfg=cfg, pipe=pipe,
+            kb_dispatch=_kb_call, transfer=_transfer,
+        )
+
     try:
-        await pipe.start()
+        if flow is not None:
+            await flow.start()
+        else:
+            await pipe.start()
         while True:
             msg = await ws.receive_text()
             try:

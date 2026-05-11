@@ -38,6 +38,7 @@ class AgentConfig:
     sample_rate: int = 16000
     knowledge_base_ids: list[str] = field(default_factory=list)
     embedding_model: str = "text-embedding-3-small"
+    flow_graph: dict | None = None
 
 
 @dataclass
@@ -238,6 +239,12 @@ class Pipeline:
         self._turn_task: asyncio.Task | None = None
         self._closed = False
         self._user_buf = ""
+        # Optional callback invoked after each turn_end event is emitted.
+        # FlowExecutor wires itself here to advance the graph.
+        self.on_turn_end: Callable[[], Awaitable[None]] | None = None
+        # Marker for the per-step system note so FlowExecutor can replace it
+        # without leaking earlier step intent into later turns.
+        self._STEP_MARKER = "__flow_step__"
 
     async def _default_llm(self, **kw):
         async for e in litellm_turn(model_id=self.cfg.model_id, temperature=self.cfg.temperature, **kw):
@@ -290,6 +297,29 @@ class Pipeline:
         await self.cancel_current_turn()
         await self._out.put(None)
 
+    # --- flow-executor hooks ------------------------------------------------
+
+    def set_step_prompt(self, text: str | None) -> None:
+        """Replace the active per-step system note (FlowExecutor)."""
+        self._messages = [
+            m for m in self._messages
+            if not (m.get("role") == "system" and isinstance(m.get("content"), str)
+                    and m["content"].startswith(self._STEP_MARKER))
+        ]
+        if text:
+            self._messages.append(
+                {"role": "system", "content": f"{self._STEP_MARKER}{text}"}
+            )
+
+    def append_system_note(self, text: str) -> None:
+        """Inject a plain system message (e.g. KB results) for the next turn."""
+        if text:
+            self._messages.append({"role": "system", "content": text})
+
+    def message_count(self) -> int:
+        """Test/debug accessor for the underlying message buffer length."""
+        return len(self._messages)
+
     # --- internals ----------------------------------------------------------
 
     async def _run_turn(self) -> None:
@@ -334,6 +364,11 @@ class Pipeline:
 
             if not tool_calls:
                 await self._out.put(PipelineEvent(kind="turn_end"))
+                if self.on_turn_end is not None:
+                    try:
+                        await self.on_turn_end()
+                    except Exception as exc:
+                        log.exception("pipeline.on_turn_end.err", err=str(exc))
                 return
 
             # Append assistant tool_calls record + tool results, then loop.
