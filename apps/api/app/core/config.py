@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     enable_object_store: bool = Field(False)
     enable_async_kb_ingest: bool = Field(False)
     enable_webhook_worker: bool = Field(False)
+    enable_post_call_analysis: bool = Field(False)
+    analysis_model: str = Field("gemini/gemini-2.0-flash")
 
     google_oauth_client_id: str = Field("")
     google_oauth_client_secret: str = Field("")

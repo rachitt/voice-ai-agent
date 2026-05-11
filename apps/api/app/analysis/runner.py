@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import log
-from app.db.models import Call
+from app.db.models import AgentVersion, Call
 from app.pipeline.llm import Message, complete
 
 DEFAULT_SUMMARY_PROMPT = (
@@ -100,8 +100,16 @@ async def analyze_call(
         raise LookupError(f"call {call_id} not found")
 
     transcript_text = _format_transcript(call.transcript)
-    plan = (call.analysis or {}).get("plan") if call.analysis else None
-    plan = plan or {}
+    # Resolve the analysis plan from the AgentVersion the call ran on, falling
+    # back to a plan embedded on the call.analysis blob (legacy / manual runs).
+    plan: dict[str, Any] = {}
+    if call.agent_version_id:
+        ver = await db.get(AgentVersion, call.agent_version_id)
+        if ver is not None and isinstance(ver.analysis_plan, dict):
+            plan = ver.analysis_plan
+    if not plan and call.analysis:
+        legacy = call.analysis.get("plan") if isinstance(call.analysis, dict) else None
+        plan = legacy if isinstance(legacy, dict) else {}
 
     out: dict[str, Any] = {
         "completed_at": datetime.now(UTC).isoformat(),
