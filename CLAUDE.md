@@ -22,4 +22,4 @@
 - Diff behaviour between main and your changes when relevant
 - Ask yourself : "Would a staff engineer approve this?"
 - When given a bug report : just fix it
-
+- For bugs, dont just scratch the surface. Dive into the root cause and start fixing from there.
