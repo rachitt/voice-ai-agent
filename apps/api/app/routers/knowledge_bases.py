@@ -3,12 +3,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import Principal, require_api_key
+from app.core.config import get_settings
 from app.core.logging import log
 from app.db.models import KbSource, KnowledgeBase
 from app.db.session import get_db
 from app.kb.loaders import UnsupportedSourceError, detect_kind, extract_text
 from app.kb.store import ingest_source_text
 from app.schemas.knowledge_bases import KbCreate, KbOut, KbSourceCreate, KbSourceOut
+from app.storage.s3 import put_object_bytes
 
 router = APIRouter(prefix="/v1/knowledge-bases", tags=["knowledge-bases"])
 
@@ -110,6 +112,18 @@ async def upload_source(
     db.add(src)
     await db.commit()
     await db.refresh(src)
+
+    settings = get_settings()
+    s3_key = await put_object_bytes(
+        bucket=settings.s3_bucket_kb,
+        key=f"kb/{kb_id}/{src.id}/{name}",
+        data=data,
+        content_type=file.content_type or "application/octet-stream",
+    )
+    if s3_key:
+        src.s3_key = s3_key
+        await db.commit()
+        await db.refresh(src)
 
     try:
         await ingest_source_text(
