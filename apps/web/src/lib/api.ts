@@ -137,6 +137,29 @@ export interface StreamToken {
   ttl_seconds: number
 }
 
+// --- auth ------------------------------------------------------------------
+
+export interface MeResponse {
+  user: { id: string; email: string; name: string | null; avatar_url: string | null }
+  org: { id: string; name: string; slug: string } | null
+}
+
+export const auth = {
+  loginGoogleUrl: () => `${getApiBase()}/v1/auth/login/google`,
+  me: async (): Promise<MeResponse | null> => {
+    const r = await fetch(`${getApiBase()}/v1/auth/me`, { credentials: 'include' })
+    if (r.status === 401) return null
+    if (!r.ok) throw new Error(`/me ${r.status}`)
+    return (await r.json()) as MeResponse
+  },
+  logout: async (): Promise<void> => {
+    await fetch(`${getApiBase()}/v1/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+  },
+}
+
 /** Pick the latest AgentVersion (highest `version`) — that's the active draft. */
 export function latestVersion(detail: AgentDetail): AgentVersion | null {
   if (!detail.versions || detail.versions.length === 0) return null

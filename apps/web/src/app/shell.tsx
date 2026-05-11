@@ -10,8 +10,11 @@ import {
   LifeBuoy,
   Plus,
   ChevronDown,
+  LogOut,
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
+import { useAuth } from '@/lib/useAuth'
+import { auth as authApi } from '@/lib/api'
 
 type NavItem = { to: string; icon: typeof Rocket; label: string }
 
@@ -72,16 +75,65 @@ function Sidebar() {
         <button className="mt-2 text-xs text-accent hover:underline">Add credits</button>
       </div>
 
-      <div className="flex items-center gap-2 border-t border-border px-3 py-3">
-        <div className="grid h-7 w-7 place-items-center rounded-full bg-accent-dim text-[11px] font-medium text-bg">
-          RP
-        </div>
-        <div className="min-w-0 text-xs">
-          <div className="truncate">Rachit</div>
-          <div className="truncate text-muted">Pro Plan</div>
-        </div>
-      </div>
+      <UserBadge />
     </aside>
+  )
+}
+
+function UserBadge() {
+  const { me, signedIn, logout } = useAuth()
+  if (!signedIn || !me) {
+    return (
+      <div className="flex items-center gap-2 border-t border-border px-3 py-3">
+        <a
+          data-testid="sidebar-signin"
+          href={authApi.loginGoogleUrl()}
+          className="flex w-full items-center justify-center gap-2 rounded-[8px] border border-border bg-panel-2 px-2 py-1.5 text-xs hover:bg-panel"
+        >
+          Sign in
+        </a>
+      </div>
+    )
+  }
+  const initials =
+    (me.user.name ?? me.user.email)
+      .split(/[\s.@]/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase() ?? '')
+      .join('') || '?'
+  return (
+    <div
+      data-testid="sidebar-user"
+      className="flex items-center gap-2 border-t border-border px-3 py-3"
+    >
+      {me.user.avatar_url ? (
+        <img
+          src={me.user.avatar_url}
+          alt=""
+          className="h-7 w-7 rounded-full"
+          referrerPolicy="no-referrer"
+        />
+      ) : (
+        <div className="grid h-7 w-7 place-items-center rounded-full bg-accent-dim text-[11px] font-medium text-bg">
+          {initials}
+        </div>
+      )}
+      <div className="min-w-0 flex-1 text-xs">
+        <div className="truncate" title={me.user.email}>
+          {me.user.name ?? me.user.email}
+        </div>
+        <div className="truncate text-muted">{me.org?.slug ?? '—'}</div>
+      </div>
+      <button
+        data-testid="sidebar-logout"
+        title="Sign out"
+        onClick={logout}
+        className="grid h-7 w-7 place-items-center rounded-[6px] text-muted hover:text-fg"
+      >
+        <LogOut className="h-3.5 w-3.5" />
+      </button>
+    </div>
   )
 }
 

@@ -59,6 +59,9 @@ class User(Base, TimestampMixin):
     org_id: Mapped[str] = mapped_column(ForeignKey("orgs.id", ondelete="CASCADE"), index=True)
     email: Mapped[str] = mapped_column(String(254), unique=True, nullable=False)
     name: Mapped[str | None] = mapped_column(String(120))
+    avatar_url: Mapped[str | None] = mapped_column(String(512))
+    google_sub: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ApiKey(Base, TimestampMixin):

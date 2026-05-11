@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.core.logging import configure_logging, log
 from app.routers import (
     agents,
+    auth_oauth,
     calls,
     knowledge_bases,
     phone_numbers,
@@ -51,6 +52,7 @@ def create_app() -> FastAPI:
     app.include_router(web_call_ws.router)
     app.include_router(telnyx_media_ws.router)
     app.include_router(webhooks.router)
+    app.include_router(auth_oauth.router)
 
     return app
 

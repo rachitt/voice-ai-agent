@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     enable_object_store: bool = Field(False)
     enable_async_kb_ingest: bool = Field(False)
 
+    google_oauth_client_id: str = Field("")
+    google_oauth_client_secret: str = Field("")
+    google_oauth_redirect_uri: str = Field("http://localhost:8000/v1/auth/callback/google")
+    session_cookie_name: str = Field("voice_session")
+    session_ttl_seconds: int = Field(60 * 60 * 24 * 14)  # 14 days
+    web_app_base_url: str = Field("http://localhost:5173")
+
     livekit_url: str = Field("ws://localhost:7880")
     livekit_api_key: str = Field("devkey")
     livekit_api_secret: str = Field("devsecret-32-chars-min-for-livekit-jwt")

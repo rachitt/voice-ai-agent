@@ -3,10 +3,12 @@ import { Shell } from './shell'
 import { ConsolePage } from '@/pages/console'
 import { BuilderPage } from '@/pages/builder'
 import { WebCallPage } from '@/pages/web-call'
+import { SignInPage } from '@/pages/signin'
 
 export function AppRouter() {
   return (
     <Routes>
+      <Route path="signin" element={<SignInPage />} />
       <Route element={<Shell />}>
         <Route index element={<ConsolePage />} />
         <Route path="web-call" element={<WebCallPage />} />
