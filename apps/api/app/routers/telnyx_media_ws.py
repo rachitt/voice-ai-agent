@@ -22,6 +22,7 @@ from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.analysis.scheduler import schedule_post_call
 from app.core.config import get_settings
 from app.core.logging import log
 from app.db.models import Call, CallEvent, CallStatus
@@ -149,9 +150,12 @@ async def _run_pstn_session(ws: WebSocket, db: AsyncSession, call: Call, cfg: Ag
 
     flow: FlowExecutor | None = None
     if has_executable_graph(cfg.flow_graph):
+        if call.dynamic_variables is None:
+            call.dynamic_variables = {}
         flow = FlowExecutor(
             graph=cfg.flow_graph or {}, cfg=cfg, pipe=pipe,
             kb_dispatch=_kb_call, transfer=_transfer,
+            variables=call.dynamic_variables,
         )
 
     try:
@@ -197,6 +201,7 @@ async def _run_pstn_session(ws: WebSocket, db: AsyncSession, call: Call, cfg: Ag
         event_bus.close(call.id)
         await _upload_recording(call, recorder)
         await _finalise(db, call, transcript_log)
+        schedule_post_call(call.id)
         await telnyx.aclose()
         try:
             await ws.close()

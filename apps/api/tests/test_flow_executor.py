@@ -391,6 +391,162 @@ async def test_set_step_prompt_replaces_prior_step_prompt():
 
 
 @pytest.mark.asyncio
+async def test_executor_renders_template_in_greeting_and_collect():
+    graph = G(
+        ("node", "g", "greeting", {"prompt": "Hi {{name}}."}),
+        ("node", "c", "collect", {"prompt": "Help {{name}} with {{topic}}."}),
+        ("node", "e", "end"),
+        ("edge", "g", "c"),
+        ("edge", "c", "e"),
+    )
+    cfg = AgentConfig()
+    pipe = Pipeline(cfg, llm=text_llm(["ok"]), tts=fake_tts())
+    vars_bag = {"name": "Sam", "topic": "refunds"}
+    flow = FlowExecutor(graph=graph, cfg=cfg, pipe=pipe, variables=vars_bag)
+
+    out: list[PipelineEvent] = []
+
+    async def reader():
+        async for ev in pipe.events():
+            out.append(ev)
+
+    reader_task = asyncio.create_task(reader())
+    await flow.start()
+    # Collect step prompt rendered immediately (no async event drain needed).
+    assert any(
+        "Help Sam with refunds." in (m.get("content") or "")
+        for m in pipe._messages
+    )
+    await pipe.feed_user_text("ok")
+    await asyncio.wait_for(reader_task, timeout=2.0)
+    # After full drain, greeting audio is in the event stream.
+    audio = b"".join(e.audio for e in out if e.audio)
+    assert b"Hi Sam." in audio
+
+
+@pytest.mark.asyncio
+async def test_executor_renders_kb_query_template():
+    graph = G(
+        ("node", "g", "greeting", {"prompt": "Hi."}),
+        (
+            "node", "k", "kb_lookup",
+            {"kb_id": "kb_x", "query_template": "refunds for {{order_id}}", "top_k": 1},
+        ),
+        ("node", "c", "collect", {"prompt": "help"}),
+        ("node", "e", "end"),
+        ("edge", "g", "k"),
+        ("edge", "k", "c"),
+        ("edge", "c", "e"),
+    )
+    seen: dict = {}
+
+    async def fake_kb(*, kb_id, query, top_k):
+        seen["query"] = query
+        return {"hits": []}
+
+    cfg = AgentConfig()
+    pipe = Pipeline(cfg, llm=text_llm(["ok"]), tts=fake_tts())
+    flow = FlowExecutor(
+        graph=graph, cfg=cfg, pipe=pipe,
+        kb_dispatch=fake_kb, variables={"order_id": "A-42"},
+    )
+
+    async def reader():
+        async for _ in pipe.events():
+            pass
+
+    reader_task = asyncio.create_task(reader())
+    await flow.start()
+    assert seen.get("query") == "refunds for A-42"
+    await pipe.feed_user_text("ok")
+    await asyncio.wait_for(reader_task, timeout=2.0)
+
+
+def test_render_missing_var_renders_empty():
+    cfg = AgentConfig()
+    pipe = Pipeline(cfg, llm=text_llm([]), tts=fake_tts())
+    flow = FlowExecutor(graph={"nodes": [], "edges": []}, cfg=cfg, pipe=pipe, variables={"a": "x"})
+    assert flow._render("Hello {{missing}}!") == "Hello !"
+    assert flow._render("a={{a}}, b={{b}}") == "a=x, b="
+
+
+def test_render_supports_dotted_keys():
+    cfg = AgentConfig()
+    pipe = Pipeline(cfg, llm=text_llm([]), tts=fake_tts())
+    flow = FlowExecutor(
+        graph={"nodes": [], "edges": []}, cfg=cfg, pipe=pipe,
+        variables={"customer": {"email": "x@y.com", "tier": "gold"}},
+    )
+    assert flow._render("{{customer.email}}") == "x@y.com"
+    assert flow._render("{{customer.tier}}") == "gold"
+    assert flow._render("{{customer.missing}}") == ""
+
+
+def test_render_non_string_values():
+    cfg = AgentConfig()
+    pipe = Pipeline(cfg, llm=text_llm([]), tts=fake_tts())
+    flow = FlowExecutor(
+        graph={"nodes": [], "edges": []}, cfg=cfg, pipe=pipe,
+        variables={"n": 42, "lst": [1, 2], "obj": {"k": "v"}},
+    )
+    assert flow._render("n={{n}}") == "n=42"
+    assert flow._render("lst={{lst}}") == "lst=[1, 2]"
+    assert "k" in flow._render("obj={{obj}}")
+
+
+@pytest.mark.asyncio
+async def test_api_node_merges_response_into_vars(monkeypatch):
+    graph = G(
+        ("node", "g", "greeting", {"prompt": "Hi."}),
+        ("node", "a", "api", {"webhook": "https://hooks.example/run"}),
+        ("node", "c", "collect", {"prompt": "Your account: {{account_id}}"}),
+        ("node", "e", "end"),
+        ("edge", "g", "a"),
+        ("edge", "a", "c"),
+        ("edge", "c", "e"),
+    )
+
+    class _Resp:
+        status_code = 200
+        text = '{"account_id": "AC-99", "tier": "gold"}'
+        def json(self):
+            return {"account_id": "AC-99", "tier": "gold"}
+
+    class _Client:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *a):
+            return False
+        async def post(self, url, json=None):
+            return _Resp()
+
+    from app.pipeline import flow_executor as fe
+    monkeypatch.setattr(fe.httpx, "AsyncClient", lambda *a, **kw: _Client())
+
+    cfg = AgentConfig()
+    pipe = Pipeline(cfg, llm=text_llm(["ok"]), tts=fake_tts())
+    vars_bag: dict = {}
+    flow = FlowExecutor(graph=graph, cfg=cfg, pipe=pipe, variables=vars_bag)
+
+    async def reader():
+        async for _ in pipe.events():
+            pass
+
+    reader_task = asyncio.create_task(reader())
+    await flow.start()
+    # Vars merged in place.
+    assert vars_bag["account_id"] == "AC-99"
+    assert vars_bag["tier"] == "gold"
+    # Collect prompt rendered with merged value.
+    assert any(
+        "Your account: AC-99" in (m.get("content") or "")
+        for m in pipe._messages
+    )
+    await pipe.feed_user_text("ok")
+    await asyncio.wait_for(reader_task, timeout=2.0)
+
+
+@pytest.mark.asyncio
 async def test_executor_no_root_logs_and_returns():
     graph = G(("node", "c", "collect"))  # no greeting → no root
     cfg = AgentConfig(first_message="kept")

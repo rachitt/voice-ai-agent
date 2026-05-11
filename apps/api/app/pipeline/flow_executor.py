@@ -31,6 +31,7 @@ next outbound edge with a warning, mirroring the validator's policy.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
@@ -69,6 +70,7 @@ class FlowExecutor:
         pipe: Pipeline,
         kb_dispatch: KbDispatchFn | None = None,
         transfer: TransferFn | None = None,
+        variables: dict[str, Any] | None = None,
     ) -> None:
         self.cfg = cfg
         self.pipe = pipe
@@ -76,6 +78,10 @@ class FlowExecutor:
         self._transfer = transfer
         self._closed = False
         self.current_id: str | None = None
+        # Mutable variable bag used for {{var}} interpolation. The caller can
+        # pass the same dict they want updated as `api` nodes return data —
+        # we mutate in place so the live Call.dynamic_variables stays in sync.
+        self._vars: dict[str, Any] = variables if variables is not None else {}
 
         nodes_raw = graph.get("nodes") or []
         edges_raw = graph.get("edges") or []
@@ -100,6 +106,44 @@ class FlowExecutor:
             label = e.get("label")
             label = label.lower() if isinstance(label, str) else None
             self._edges.setdefault(src, []).append((tgt, label))
+
+    # --- variable interpolation --------------------------------------------
+
+    _VAR_RE = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\}\}")
+
+    def _render(self, text: str | None) -> str:
+        """Substitute {{var}} placeholders using `self._vars`. Missing keys
+        render as empty string and emit a debug log so authors notice."""
+        if not text:
+            return ""
+
+        def _sub(m: re.Match[str]) -> str:
+            key = m.group(1)
+            val = self._lookup_var(key)
+            if val is None:
+                log.info("flow.var.miss", key=key)
+                return ""
+            if isinstance(val, str):
+                return val
+            try:
+                return json.dumps(val) if isinstance(val, (dict, list)) else str(val)
+            except Exception:
+                return str(val)
+
+        return self._VAR_RE.sub(_sub, text)
+
+    def _lookup_var(self, key: str) -> Any:
+        """Resolve dotted keys like `customer.email` against the vars bag."""
+        if "." not in key:
+            return self._vars.get(key)
+        head, *rest = key.split(".")
+        cur: Any = self._vars.get(head)
+        for part in rest:
+            if isinstance(cur, dict):
+                cur = cur.get(part)
+            else:
+                return None
+        return cur
 
     # --- public API ---------------------------------------------------------
 
@@ -126,11 +170,12 @@ class FlowExecutor:
         return None
 
     def _spoken_text(self, nv: _NodeView) -> str:
-        return (
+        raw = (
             (isinstance(nv.data.get("prompt"), str) and nv.data["prompt"].strip())
             or (isinstance(nv.data.get("title"), str) and nv.data["title"].strip())
             or "Hello."
         )
+        return self._render(raw) or "Hello."
 
     def _next(self, nid: str, *, label: str | None = None) -> str | None:
         outs = self._edges.get(nid) or []
@@ -172,10 +217,10 @@ class FlowExecutor:
             await self._terminate()
             return
         if nv.kind == "voicemail":
-            msg = (
+            raw = (
                 isinstance(nv.data.get("prompt"), str) and nv.data["prompt"].strip()
             ) or "Please leave a message after the tone."
-            await self._speak(msg)
+            await self._speak(self._render(raw))
             await self._terminate()
             return
         if nv.kind == "transfer":
@@ -192,7 +237,7 @@ class FlowExecutor:
             return
         if nv.kind == "collect":
             prompt = isinstance(nv.data.get("prompt"), str) and nv.data["prompt"].strip()
-            self.pipe.set_step_prompt(prompt or None)
+            self.pipe.set_step_prompt(self._render(prompt) or None)
             return  # wait for user turn → _on_turn_end advances
         if nv.kind == "condition":
             # Condition classifies the just-completed turn synchronously, then
@@ -232,7 +277,7 @@ class FlowExecutor:
         kb_id = nv.data.get("kb_id") or (
             self.cfg.knowledge_base_ids[0] if self.cfg.knowledge_base_ids else None
         )
-        query = (nv.data.get("query_template") or "").strip()
+        query = self._render((nv.data.get("query_template") or "").strip())
         top_k = int(nv.data.get("top_k") or 5)
         top_k = max(1, min(top_k, 20))
         if not kb_id or not query:
@@ -248,18 +293,26 @@ class FlowExecutor:
             self.pipe.append_system_note(snippet)
 
     async def _do_api(self, nv: _NodeView) -> None:
-        url = (nv.data.get("webhook") or "").strip()
+        url = self._render((nv.data.get("webhook") or "").strip())
         if not url:
             return
         body = {
             "node_id": nv.id,
             "title": nv.data.get("title"),
-            "dynamic_variables": list(self.cfg.knowledge_base_ids),  # placeholder
+            "dynamic_variables": dict(self._vars),
         }
         try:
             async with httpx.AsyncClient(timeout=8.0) as client:
                 r = await client.post(url, json=body)
             text = r.text[:1000] if r.text else ""
+            # If the response is JSON, merge top-level keys into the var bag
+            # so downstream nodes can reference them via {{key}}.
+            try:
+                parsed = r.json()
+                if isinstance(parsed, dict):
+                    self._vars.update(parsed)
+            except Exception:
+                pass
             note = (
                 f"Result from step '{nv.data.get('title') or nv.id}' "
                 f"(status {r.status_code}): {text}"
@@ -272,8 +325,8 @@ class FlowExecutor:
         if self._transfer is None:
             log.info("flow.transfer.skip_no_dispatch", node=nv.id)
             return
-        to = (nv.data.get("webhook") or "").strip()  # builder reuses 'webhook' field
-        summary = (nv.data.get("prompt") or "").strip()
+        to = self._render((nv.data.get("webhook") or "").strip())
+        summary = self._render((nv.data.get("prompt") or "").strip())
         if not to:
             log.info("flow.transfer.skip_no_target", node=nv.id)
             return
@@ -290,8 +343,8 @@ class FlowExecutor:
         Returns the lowercase label string, defaulting to 'no' when uncertain
         so callers fall back to a safer branch.
         """
-        criterion = (nv.data.get("prompt") or "").strip() or (
-            nv.data.get("title") or ""
+        criterion = self._render(
+            (nv.data.get("prompt") or "").strip() or (nv.data.get("title") or "")
         )
         recent: list[dict] = []
         # Re-use the pipeline's recent transcript view (last ~4 messages).

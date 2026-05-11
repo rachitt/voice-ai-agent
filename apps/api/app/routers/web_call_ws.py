@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import log
 from app.db.models import AgentVersion, Call, CallEvent, CallStatus
 from app.db.session import SessionLocal
+from app.analysis.scheduler import schedule_post_call
 from app.core.config import get_settings
 from app.pipeline import event_bus
 from app.pipeline.flow_executor import FlowExecutor, has_executable_graph
@@ -238,8 +239,16 @@ async def _run_session(
 
     flow: FlowExecutor | None = None
     if has_executable_graph(cfg.flow_graph):
+        # Mutate the call row's dynamic_variables in place so api-node responses
+        # persist for downstream nodes (and the post-call analysis).
+        if call.dynamic_variables is None:
+            call.dynamic_variables = {}
         flow = FlowExecutor(
-            graph=cfg.flow_graph or {}, cfg=cfg, pipe=pipe, kb_dispatch=_kb_call
+            graph=cfg.flow_graph or {},
+            cfg=cfg,
+            pipe=pipe,
+            kb_dispatch=_kb_call,
+            variables=call.dynamic_variables,
         )
 
     try:
@@ -285,6 +294,7 @@ async def _run_session(
         event_bus.close(call.id)
         await _upload_recording(call, recorder)
         await _finalise_call(db, call, transcript_log)
+        schedule_post_call(call.id)
         try:
             await ws.close()
         except Exception:
