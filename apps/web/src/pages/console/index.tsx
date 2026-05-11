@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { Settings2 } from 'lucide-react'
+import { AgentsListPanel } from './AgentsListPanel'
 import { DeploymentChecklist } from './DeploymentChecklist'
 import { LiveCallSimulator } from './LiveCallSimulator'
 import { LiveTranscript } from './LiveTranscript'
@@ -12,6 +13,7 @@ import { LaunchHistory } from './LaunchHistory'
 export function ConsolePage() {
   return (
     <div className="flex flex-col gap-4" data-testid="console-root">
+      <AgentsListPanel />
       <DeploymentChecklist />
 
       <div className="grid grid-cols-12 gap-4">

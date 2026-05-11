@@ -28,11 +28,12 @@ test.describe('Launch Console', () => {
     await expect(checklist.locator('[data-status="todo"]')).toHaveCount(2)
   })
 
-  test('transcript streams new bubbles over time', async ({ page }) => {
+  test('transcript shows demo seed when no call is being watched', async ({ page }) => {
     const bubbles = page.getByTestId('bubble')
     await expect(bubbles).toHaveCount(6)
-    await expect(bubbles).toHaveCount(7, { timeout: 4000 })
+    await expect(page.getByTestId('demo-chip')).toBeVisible()
     await expect(bubbles.first()).toHaveAttribute('data-who', 'agent')
+    await expect(page.getByTestId('watch-call-input')).toBeVisible()
   })
 
   test('tool calls show mixed statuses', async ({ page }) => {

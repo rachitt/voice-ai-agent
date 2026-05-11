@@ -3,6 +3,7 @@ import {
   Rocket,
   BarChart3,
   Phone,
+  PhoneCall,
   BookOpen,
   Wrench,
   Settings as SettingsIcon,
@@ -16,6 +17,7 @@ type NavItem = { to: string; icon: typeof Rocket; label: string }
 
 const NAV: NavItem[] = [
   { to: '/', icon: Rocket, label: 'Launch Console' },
+  { to: '/web-call', icon: PhoneCall, label: 'Web Call' },
   { to: '/analytics', icon: BarChart3, label: 'Analytics' },
   { to: '/numbers', icon: Phone, label: 'Numbers' },
   { to: '/knowledge', icon: BookOpen, label: 'Knowledge' },

@@ -2,12 +2,14 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { Shell } from './shell'
 import { ConsolePage } from '@/pages/console'
 import { BuilderPage } from '@/pages/builder'
+import { WebCallPage } from '@/pages/web-call'
 
 export function AppRouter() {
   return (
     <Routes>
       <Route element={<Shell />}>
         <Route index element={<ConsolePage />} />
+        <Route path="web-call" element={<WebCallPage />} />
         <Route path="analytics" element={<Placeholder title="Analytics" />} />
         <Route path="numbers" element={<Placeholder title="Numbers" />} />
         <Route path="knowledge" element={<Placeholder title="Knowledge" />} />

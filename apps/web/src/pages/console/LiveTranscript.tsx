@@ -1,31 +1,74 @@
 import { useEffect, useRef, useState } from 'react'
 import { Headphones } from 'lucide-react'
-import { SEED_TRANSCRIPT, STREAM_TRANSCRIPT, type TranscriptLine } from './fixtures'
+import { getApiBase, getApiKey } from '@/lib/api'
+import { SEED_TRANSCRIPT, type TranscriptLine } from './fixtures'
 import { cn } from '@/lib/cn'
 
+const LS_CALL_ID = 'voice2.watch_call_id'
+
 export function LiveTranscript() {
-  const [lines, setLines] = useState<TranscriptLine[]>(SEED_TRANSCRIPT)
+  const [callId, setCallId] = useState<string>(() => localStorage.getItem(LS_CALL_ID) ?? '')
+  const [lines, setLines] = useState<TranscriptLine[]>([])
+  const [live, setLive] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const esRef = useRef<EventSource | null>(null)
 
   useEffect(() => {
-    const id = setInterval(() => {
-      setLines((prev) => {
-        const nextIdx = prev.length - SEED_TRANSCRIPT.length
-        const next = STREAM_TRANSCRIPT[nextIdx]
-        if (!next) {
-          clearInterval(id)
-          return prev
+    esRef.current?.close()
+    esRef.current = null
+    setLines([])
+    setLive(false)
+    setErr(null)
+    if (!callId) return
+
+    const key = getApiKey()
+    if (!key) {
+      setErr('Set API key on the Web Call page first.')
+      return
+    }
+    const url = `${getApiBase()}/v1/calls/${encodeURIComponent(callId)}/stream?token=${encodeURIComponent(key)}`
+    const es = new EventSource(url)
+    esRef.current = es
+    let counter = 0
+
+    es.addEventListener('ready', () => setLive(true))
+    es.onmessage = (e) => {
+      try {
+        const ev = JSON.parse(e.data) as { type?: string; text?: string }
+        if (!ev || !ev.text) return
+        if (ev.type === 'user_text' || ev.type === 'agent_text') {
+          const idx = ++counter
+          const t = secondsToClock(idx)
+          setLines((prev) => [
+            ...prev,
+            {
+              id: `live-${idx}`,
+              who: ev.type === 'agent_text' ? 'agent' : 'caller',
+              text: ev.text ?? '',
+              t,
+            },
+          ])
         }
-        if (prev.some((l) => l.id === next.id)) return prev
-        return [...prev, next]
-      })
-    }, 2200)
-    return () => clearInterval(id)
-  }, [])
+      } catch {
+        // ignore non-JSON
+      }
+    }
+    es.onerror = () => {
+      setErr('stream error')
+      setLive(false)
+    }
+    localStorage.setItem(LS_CALL_ID, callId)
+    return () => {
+      es.close()
+    }
+  }, [callId])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [lines.length])
+
+  const display = callId ? lines : SEED_TRANSCRIPT
 
   return (
     <div className="panel flex flex-col px-5 py-4" data-testid="transcript">
@@ -33,23 +76,55 @@ export function LiveTranscript() {
         <div className="flex items-center gap-2">
           <Headphones className="h-4 w-4 text-accent" />
           <div className="text-sm font-medium">Live Transcript</div>
-          <span className="chip">Caller · Sarah H.</span>
+          {callId ? (
+            <span
+              className="chip"
+              data-testid="live-chip"
+              data-live={live ? '1' : '0'}
+            >
+              {live ? 'live · ' : 'connecting · '}
+              {callId.slice(0, 10)}…
+            </span>
+          ) : (
+            <span className="chip" data-testid="demo-chip">
+              demo data
+            </span>
+          )}
         </div>
-        <button className="text-[11px] text-muted hover:text-fg">View full transcript →</button>
+        <input
+          data-testid="watch-call-input"
+          value={callId}
+          onChange={(e) => setCallId(e.target.value.trim())}
+          placeholder="watch call_id"
+          className="w-[160px] rounded-[6px] border border-border bg-panel-2 px-2 py-1 text-[11px]"
+        />
       </div>
 
-      <Waveform />
+      {err && (
+        <div className="mb-2 rounded border border-red-500/40 bg-red-500/10 px-2 py-1 text-[11px] text-red-300">
+          {err}
+        </div>
+      )}
+
+      <Waveform live={live} />
 
       <div ref={scrollRef} className="mt-3 flex max-h-[240px] flex-col gap-2 overflow-auto pr-1">
-        {lines.map((l) => (
-          <Bubble key={l.id} line={l} />
-        ))}
+        {display.length === 0 ? (
+          <div className="text-xs text-muted">Waiting for first turn…</div>
+        ) : (
+          display.map((l) => <Bubble key={l.id} line={l} />)
+        )}
       </div>
     </div>
   )
 }
 
-function Waveform() {
+function secondsToClock(i: number): string {
+  const s = i * 2
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+}
+
+function Waveform({ live }: { live: boolean }) {
   const bars = Array.from({ length: 48 }, (_, i) => i)
   return (
     <div className="flex h-10 items-center gap-0.5 rounded-[8px] border border-border bg-panel-2 px-2">
@@ -58,7 +133,7 @@ function Waveform() {
         return (
           <span
             key={i}
-            className="w-[2.5px] rounded-full bg-accent/60"
+            className={cn('w-[2.5px] rounded-full', live ? 'bg-accent' : 'bg-accent/40')}
             style={{ height: `${h}%`, opacity: 0.35 + (i / bars.length) * 0.65 }}
           />
         )

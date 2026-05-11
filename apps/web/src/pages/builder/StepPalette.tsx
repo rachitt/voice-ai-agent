@@ -59,6 +59,16 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
   )
 }
 
+const REAL_KINDS = new Set([
+  'greeting',
+  'collect',
+  'api',
+  'condition',
+  'transfer',
+  'voicemail',
+  'end',
+])
+
 function PaletteRow({
   kind,
   title,
@@ -69,18 +79,30 @@ function PaletteRow({
   subtitle: string
 }) {
   const Icon = KIND_ICON[kind]
+  const isReal = REAL_KINDS.has(kind)
   return (
-    <div
-      draggable
+    <button
+      type="button"
+      draggable={isReal}
       data-testid={`palette-row-${kind}`}
       data-kind={kind}
+      title={isReal ? 'Click or drag to add' : 'Integration — coming soon'}
+      onClick={() => {
+        if (!isReal) return
+        window.dispatchEvent(new CustomEvent('voice:add-step', { detail: { kind } }))
+      }}
       onDragStart={(e) => {
+        if (!isReal) {
+          e.preventDefault()
+          return
+        }
         e.dataTransfer.setData('application/voice-step', String(kind))
         e.dataTransfer.effectAllowed = 'move'
       }}
       className={cn(
-        'flex cursor-grab items-center gap-2 rounded-[8px] border border-transparent px-2 py-1.5 text-left',
+        'flex w-full cursor-grab items-center gap-2 rounded-[8px] border border-transparent px-2 py-1.5 text-left',
         'hover:border-border hover:bg-panel-2 active:cursor-grabbing',
+        !isReal && 'opacity-50 cursor-not-allowed',
       )}
     >
       <div className="grid h-7 w-7 place-items-center rounded-[8px] border border-border bg-bg">
@@ -90,6 +112,6 @@ function PaletteRow({
         <div className="text-[12px] leading-tight">{title}</div>
         <div className="truncate text-[11px] text-muted">{subtitle}</div>
       </div>
-    </div>
+    </button>
   )
 }

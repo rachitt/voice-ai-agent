@@ -1,4 +1,6 @@
+import { Copy, Trash2 } from 'lucide-react'
 import { useBuilder } from './store'
+import { RULES } from './connection-rules'
 import { KIND_ICON, KIND_TINT } from './icons'
 import { cn } from '@/lib/cn'
 import type { RetryPolicy, StepData } from './types'
@@ -8,12 +10,18 @@ type Tab = (typeof TAB_KEYS)[number]
 
 export function NodeInspector() {
   const node = useBuilder((s) => s.nodes.find((n) => n.id === s.selectedId)) ?? null
+  const edges = useBuilder((s) => s.edges)
   const update = useBuilder((s) => s.updateNodeData)
+  const removeNode = useBuilder((s) => s.removeNode)
+  const duplicateNode = useBuilder((s) => s.duplicateNode)
 
   if (!node) return <EmptyInspector />
 
   const set = (patch: Partial<StepData>) => update(node.id, patch)
   const Icon = KIND_ICON[node.data.kind]
+  const rule = RULES[node.data.kind]
+  const inboundCount = edges.filter((e) => e.target === node.id).length
+  const outboundCount = edges.filter((e) => e.source === node.id).length
 
   return (
     <aside
@@ -25,7 +33,7 @@ export function NodeInspector() {
         <div className="grid h-7 w-7 place-items-center rounded-[8px] border border-border bg-panel-2">
           <Icon className={cn('h-3.5 w-3.5', KIND_TINT[node.data.kind])} />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div
             data-testid="inspector-title"
             className="truncate text-sm font-medium"
@@ -34,11 +42,65 @@ export function NodeInspector() {
           </div>
           <div className="text-[11px] text-muted">{node.id}</div>
         </div>
+        <button
+          type="button"
+          data-testid="inspector-duplicate"
+          title="Duplicate node"
+          onClick={() => duplicateNode(node.id)}
+          className="grid h-7 w-7 place-items-center rounded-[8px] border border-border bg-panel-2 text-muted hover:text-fg"
+        >
+          <Copy className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          data-testid="inspector-delete"
+          title="Delete node"
+          onClick={() => removeNode(node.id)}
+          className="grid h-7 w-7 place-items-center rounded-[8px] border border-border bg-panel-2 text-muted hover:border-red-500/40 hover:text-red-400"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
       </div>
 
       <Tabs />
 
       <div className="min-h-0 flex-1 space-y-4 overflow-auto px-4 py-4">
+        <Field label="Title">
+          <input
+            data-testid="title-input"
+            className={inputCls}
+            value={node.data.title}
+            onChange={(e) => set({ title: e.target.value })}
+            placeholder="Step title"
+          />
+        </Field>
+
+        <Field label="Connections">
+          <div
+            data-testid="conn-summary"
+            className="flex items-center justify-between rounded-[8px] border border-border bg-panel-2 px-2.5 py-1.5 text-[12px] text-muted"
+          >
+            <span>
+              in: <span className="text-fg">{inboundCount}</span>
+              {!rule.inAllowed && <span className="ml-1 text-[10px] text-muted/70">(none allowed)</span>}
+            </span>
+            <span>
+              out: <span className="text-fg">{outboundCount}</span>
+              <span className="ml-1 text-[10px] text-muted/70">/ max {rule.outMax}</span>
+            </span>
+          </div>
+          {rule.outNeedsLabel && outboundCount < rule.outMax && (
+            <div
+              data-testid="conn-hint-branch"
+              className="mt-1.5 rounded-[8px] border border-yellow-500/30 bg-yellow-500/10 px-2.5 py-1.5 text-[11px] text-yellow-300/90"
+            >
+              Add {rule.outMax - outboundCount} more branch
+              {rule.outMax - outboundCount === 1 ? '' : 'es'} to complete the condition
+              {rule.allowedLabels ? ` (${rule.allowedLabels.join('/')})` : ''}.
+            </div>
+          )}
+        </Field>
+
         <Field label="Voice">
           <Select
             value={node.data.voice ?? 'Aria Power'}

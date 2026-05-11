@@ -1,10 +1,18 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { cn } from '@/lib/cn'
+import { RULES } from './connection-rules'
 import { KIND_ICON, KIND_TINT } from './icons'
 import type { StepNode as TStepNode } from './types'
 
+const HANDLE_BASE =
+  '!h-3 !w-3 !border-2 !border-bg !bg-border-strong transition-all hover:!h-4 hover:!w-4 hover:!bg-accent'
+const HANDLE_DISABLED = '!h-3 !w-3 !border-2 !border-bg !bg-border opacity-40 cursor-not-allowed'
+
 export function StepNodeView({ id, data, selected }: NodeProps<TStepNode>) {
   const Icon = KIND_ICON[data.kind]
+  const rule = RULES[data.kind]
+  const canTarget = rule.inAllowed
+  const canSource = rule.outMax > 0 && !rule.terminal
   return (
     <div
       data-testid="step-node"
@@ -19,7 +27,10 @@ export function StepNodeView({ id, data, selected }: NodeProps<TStepNode>) {
       <Handle
         type="target"
         position={Position.Top}
-        className="!h-2 !w-2 !border-0 !bg-border-strong"
+        isConnectable={canTarget}
+        data-testid={`handle-target-${id}`}
+        title={canTarget ? 'Drop a connection here' : `${data.kind} cannot receive inbound edges`}
+        className={canTarget ? HANDLE_BASE : HANDLE_DISABLED}
       />
       <div className="flex items-center gap-2 px-3 pb-1 pt-3">
         <div className="grid h-7 w-7 place-items-center rounded-[8px] bg-panel-2 border border-border">
@@ -36,7 +47,16 @@ export function StepNodeView({ id, data, selected }: NodeProps<TStepNode>) {
       <Handle
         type="source"
         position={Position.Bottom}
-        className="!h-2 !w-2 !border-0 !bg-border-strong"
+        isConnectable={canSource}
+        data-testid={`handle-source-${id}`}
+        title={
+          canSource
+            ? rule.outNeedsLabel
+              ? `Drag to add a branch (${(rule.allowedLabels ?? []).join('/')})`
+              : 'Drag to connect to next step'
+            : `${data.kind} has no outbound edges`
+        }
+        className={canSource ? HANDLE_BASE : HANDLE_DISABLED}
       />
     </div>
   )

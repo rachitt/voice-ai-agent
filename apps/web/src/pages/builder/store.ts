@@ -7,18 +7,53 @@ import {
   type EdgeChange,
   type NodeChange,
 } from '@xyflow/react'
+import type { AgentDetail, AgentVersion } from '@/lib/api'
+import { canConnect } from './connection-rules'
 import type { StepData, StepEdge, StepKind, StepNode } from './types'
+
+export interface AgentMeta {
+  id: string
+  name: string
+  versionId: string
+  versionNumber: number
+  firstMessage: string | null
+  systemPrompt: string | null
+  modelId: string
+  voiceId: string
+  publishedVersionId: string | null
+}
+
+export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
 type State = {
   nodes: StepNode[]
   edges: StepEdge[]
   selectedId: string | null
+  /** Last connection rejection reason (toast). */
+  connectionError: string | null
+  /** When a label-required connection is in flight, the dialog reads this. */
+  pendingBranchConnect: Connection | null
+  /** Server-backed agent identity. Null until hydrated (or in offline demo). */
+  agentMeta: AgentMeta | null
+  saveStatus: SaveStatus
+  saveError: string | null
   setSelected: (id: string | null) => void
+  setConnectionError: (msg: string | null) => void
+  setPendingBranchConnect: (c: Connection | null) => void
+  commitBranchConnect: (label: string) => void
   onNodesChange: (changes: NodeChange<StepNode>[]) => void
   onEdgesChange: (changes: EdgeChange[]) => void
   onConnect: (c: Connection) => void
-  addNode: (kind: StepKind, position: { x: number; y: number }) => void
+  addNode: (kind: StepKind, position: { x: number; y: number }) => string
   updateNodeData: (id: string, patch: Partial<StepData>) => void
+  removeNode: (id: string) => void
+  removeSelected: () => void
+  duplicateNode: (id: string) => void
+  clearGraph: () => void
+  hydrateFromAgent: (detail: AgentDetail, ver: AgentVersion) => void
+  setSaveStatus: (s: SaveStatus, err?: string | null) => void
+  setAgentName: (name: string) => void
+  setAgentMetaFields: (patch: Partial<AgentMeta>) => void
 }
 
 const seed = (): { nodes: StepNode[]; edges: StepEdge[] } => {
@@ -76,34 +111,84 @@ function e(source: string, target: string, label?: string): StepEdge {
 let counter = 0
 const nextId = (kind: string) => `${kind}-${Date.now().toString(36)}-${counter++}`
 
+const TITLES: Record<StepKind, string> = {
+  greeting: 'Greeting',
+  collect: 'Collect Info',
+  api: 'API Call',
+  condition: 'Condition',
+  transfer: 'Transfer',
+  voicemail: 'Voicemail',
+  end: 'End Call',
+}
+
 export const useBuilder = create<State>((set, get) => ({
   ...seed(),
   selectedId: 'collect-name',
+  connectionError: null,
+  pendingBranchConnect: null,
+  agentMeta: null,
+  saveStatus: 'idle',
+  saveError: null,
   setSelected: (id) => set({ selectedId: id }),
-  onNodesChange: (changes) =>
-    set({ nodes: applyNodeChanges(changes, get().nodes) }),
+  setConnectionError: (msg) => set({ connectionError: msg }),
+  setPendingBranchConnect: (c) => set({ pendingBranchConnect: c }),
+  commitBranchConnect: (label) => {
+    const c = get().pendingBranchConnect
+    if (!c || !c.source || !c.target) {
+      set({ pendingBranchConnect: null })
+      return
+    }
+    const check = canConnect(c.source, c.target, get().nodes, get().edges)
+    if (!check.ok) {
+      set({ pendingBranchConnect: null, connectionError: check.reason ?? 'invalid connection' })
+      return
+    }
+    set({
+      edges: addEdge({ ...c, type: 'smoothstep', label }, get().edges),
+      pendingBranchConnect: null,
+      connectionError: null,
+    })
+  },
+  onNodesChange: (changes) => {
+    const removed = new Set(
+      changes.filter((c) => c.type === 'remove').map((c) => (c as { id: string }).id),
+    )
+    const nextNodes = applyNodeChanges(changes, get().nodes)
+    set({
+      nodes: nextNodes,
+      // also drop any edges that point at removed nodes
+      edges: removed.size
+        ? get().edges.filter((e) => !removed.has(e.source) && !removed.has(e.target))
+        : get().edges,
+      selectedId: removed.has(get().selectedId ?? '') ? null : get().selectedId,
+    })
+  },
   onEdgesChange: (changes) =>
     set({ edges: applyEdgeChanges(changes, get().edges) }),
-  onConnect: (c) =>
-    set({ edges: addEdge({ ...c, type: 'smoothstep' }, get().edges) }),
+  onConnect: (c) => {
+    const check = canConnect(c.source, c.target, get().nodes, get().edges)
+    if (!check.ok) {
+      set({ connectionError: check.reason ?? 'invalid connection' })
+      return
+    }
+    if (check.needsLabel) {
+      set({ pendingBranchConnect: c, connectionError: null })
+      return
+    }
+    set({
+      edges: addEdge({ ...c, type: 'smoothstep' }, get().edges),
+      connectionError: null,
+    })
+  },
   addNode: (kind, position) => {
     const id = nextId(kind)
-    const titles: Record<StepKind, string> = {
-      greeting: 'Greeting',
-      collect: 'Collect Info',
-      api: 'API Call',
-      condition: 'Condition',
-      transfer: 'Transfer',
-      voicemail: 'Voicemail',
-      end: 'End Call',
-    }
     const node: StepNode = {
       id,
       type: 'step',
       position,
       data: {
         kind,
-        title: titles[kind],
+        title: TITLES[kind],
         subtitle: 'Configure…',
         voice: 'Aria Power',
         mode: 'Normal',
@@ -113,6 +198,7 @@ export const useBuilder = create<State>((set, get) => ({
       },
     }
     set({ nodes: [...get().nodes, node], selectedId: id })
+    return id
   },
   updateNodeData: (id, patch) =>
     set({
@@ -120,4 +206,65 @@ export const useBuilder = create<State>((set, get) => ({
         nd.id === id ? { ...nd, data: { ...nd.data, ...patch } } : nd,
       ),
     }),
+  removeNode: (id) =>
+    set({
+      nodes: get().nodes.filter((n) => n.id !== id),
+      edges: get().edges.filter((e) => e.source !== id && e.target !== id),
+      selectedId: get().selectedId === id ? null : get().selectedId,
+    }),
+  removeSelected: () => {
+    const id = get().selectedId
+    if (!id) return
+    set({
+      nodes: get().nodes.filter((n) => n.id !== id),
+      edges: get().edges.filter((e) => e.source !== id && e.target !== id),
+      selectedId: null,
+    })
+  },
+  duplicateNode: (id) => {
+    const src = get().nodes.find((n) => n.id === id)
+    if (!src) return
+    const newId = nextId(src.data.kind)
+    const node: StepNode = {
+      ...src,
+      id: newId,
+      position: { x: src.position.x + 40, y: src.position.y + 40 },
+      data: { ...src.data, title: `${src.data.title} copy` },
+      selected: false,
+    }
+    set({ nodes: [...get().nodes, node], selectedId: newId })
+  },
+  clearGraph: () => set({ nodes: [], edges: [], selectedId: null }),
+  hydrateFromAgent: (detail, ver) => {
+    const fg = ver.flow_graph as { nodes?: unknown[]; edges?: unknown[] } | null
+    const nextNodes = (fg?.nodes as StepNode[] | undefined) ?? []
+    const nextEdges = (fg?.edges as StepEdge[] | undefined) ?? []
+    set({
+      nodes: nextNodes,
+      edges: nextEdges,
+      selectedId: null,
+      agentMeta: {
+        id: detail.id,
+        name: detail.name,
+        versionId: ver.id,
+        versionNumber: ver.version,
+        firstMessage: ver.first_message,
+        systemPrompt: ver.system_prompt,
+        modelId: ver.model_id,
+        voiceId: ver.voice_id,
+        publishedVersionId: detail.published_version_id,
+      },
+      saveStatus: 'idle',
+      saveError: null,
+    })
+  },
+  setSaveStatus: (s, err = null) => set({ saveStatus: s, saveError: err }),
+  setAgentName: (name) => {
+    const m = get().agentMeta
+    if (m) set({ agentMeta: { ...m, name } })
+  },
+  setAgentMetaFields: (patch) => {
+    const m = get().agentMeta
+    if (m) set({ agentMeta: { ...m, ...patch } })
+  },
 }))
