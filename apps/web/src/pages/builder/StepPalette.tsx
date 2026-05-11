@@ -14,7 +14,10 @@ export function StepPalette() {
   const integ = filtered.filter((p) => p.group === 'integrations')
 
   return (
-    <aside className="flex w-[240px] shrink-0 flex-col border-r border-border bg-panel">
+    <aside
+      data-testid="palette"
+      className="flex w-[240px] shrink-0 flex-col border-r border-border bg-panel"
+    >
       <div className="px-4 py-4">
         <div className="text-sm font-medium">Add Step</div>
       </div>
@@ -25,6 +28,7 @@ export function StepPalette() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search"
+            data-testid="palette-search"
             className="w-full bg-transparent text-xs outline-none placeholder:text-muted"
           />
         </div>
@@ -68,6 +72,8 @@ function PaletteRow({
   return (
     <div
       draggable
+      data-testid={`palette-row-${kind}`}
+      data-kind={kind}
       onDragStart={(e) => {
         e.dataTransfer.setData('application/voice-step', String(kind))
         e.dataTransfer.effectAllowed = 'move'

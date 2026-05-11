@@ -7,6 +7,7 @@ export function BuilderTopbar({ agentId }: { agentId: string }) {
     <header className="flex h-14 shrink-0 items-center gap-4 border-b border-border bg-panel px-4">
       <NavLink
         to="/"
+        data-testid="back-to-console"
         className="grid h-8 w-8 place-items-center rounded-[8px] border border-border bg-bg text-muted hover:text-fg"
       >
         <ArrowLeft className="h-4 w-4" />
@@ -24,10 +25,16 @@ export function BuilderTopbar({ agentId }: { agentId: string }) {
 
       <div className="ml-auto flex items-center gap-2">
         <VersionPicker />
-        <button className="inline-flex items-center gap-1.5 rounded-[8px] border border-border bg-panel-2 px-3 py-1.5 text-xs text-muted hover:text-fg">
+        <button
+          data-testid="test-call"
+          className="inline-flex items-center gap-1.5 rounded-[8px] border border-border bg-panel-2 px-3 py-1.5 text-xs text-muted hover:text-fg"
+        >
           <Phone className="h-3.5 w-3.5" /> Test call
         </button>
-        <button className="inline-flex items-center gap-1.5 rounded-[8px] bg-accent px-3 py-1.5 text-xs font-medium text-bg hover:bg-[#3aef8d]">
+        <button
+          data-testid="publish"
+          className="inline-flex items-center gap-1.5 rounded-[8px] bg-accent px-3 py-1.5 text-xs font-medium text-bg hover:bg-[#3aef8d]"
+        >
           <Upload className="h-3.5 w-3.5" /> Publish
         </button>
       </div>

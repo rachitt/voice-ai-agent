@@ -16,13 +16,22 @@ export function NodeInspector() {
   const Icon = KIND_ICON[node.data.kind]
 
   return (
-    <aside className="flex w-[320px] shrink-0 flex-col border-l border-border bg-panel">
+    <aside
+      data-testid="inspector"
+      data-node-id={node.id}
+      className="flex w-[320px] shrink-0 flex-col border-l border-border bg-panel"
+    >
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <div className="grid h-7 w-7 place-items-center rounded-[8px] border border-border bg-panel-2">
           <Icon className={cn('h-3.5 w-3.5', KIND_TINT[node.data.kind])} />
         </div>
         <div className="min-w-0">
-          <div className="truncate text-sm font-medium">{node.data.title}</div>
+          <div
+            data-testid="inspector-title"
+            className="truncate text-sm font-medium"
+          >
+            {node.data.title}
+          </div>
           <div className="text-[11px] text-muted">{node.id}</div>
         </div>
       </div>
@@ -49,6 +58,7 @@ export function NodeInspector() {
         <Field label="Prompt">
           <textarea
             rows={4}
+            data-testid="prompt-input"
             className={inputCls}
             value={node.data.prompt ?? ''}
             onChange={(e) => set({ prompt: e.target.value, subtitle: e.target.value })}
@@ -79,6 +89,8 @@ export function NodeInspector() {
               <button
                 key={r}
                 onClick={() => set({ retry: r })}
+                data-testid={`retry-${r}`}
+                data-active={node.data.retry === r ? '1' : '0'}
                 className={cn(
                   'flex-1 rounded-[8px] border px-2 py-1.5 text-[11px] capitalize transition-colors',
                   node.data.retry === r
@@ -104,7 +116,10 @@ export function NodeInspector() {
 
 function EmptyInspector() {
   return (
-    <aside className="flex w-[320px] shrink-0 items-center justify-center border-l border-border bg-panel text-xs text-muted">
+    <aside
+      data-testid="inspector-empty"
+      className="flex w-[320px] shrink-0 items-center justify-center border-l border-border bg-panel text-xs text-muted"
+    >
       Select a node
     </aside>
   )

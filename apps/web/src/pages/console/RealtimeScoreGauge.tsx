@@ -6,7 +6,7 @@ export function RealtimeScoreGauge() {
   const data = [{ name: 'score', value: score, fill: '#22e07a' }]
 
   return (
-    <div className="panel px-5 py-4">
+    <div className="panel px-5 py-4" data-testid="score-gauge">
       <div className="flex items-center justify-between">
         <div className="text-sm font-medium">Realtime Score</div>
         <span className="chip">live · 5s window</span>

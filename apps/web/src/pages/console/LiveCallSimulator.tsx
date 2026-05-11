@@ -2,7 +2,7 @@ import { Mic, Grid3x3, Volume2, Pause, PhoneOff, Play } from 'lucide-react'
 
 export function LiveCallSimulator() {
   return (
-    <div className="panel flex flex-col px-5 py-4">
+    <div className="panel flex flex-col px-5 py-4" data-testid="simulator">
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
@@ -21,7 +21,10 @@ export function LiveCallSimulator() {
           <button className="rounded-[8px] border border-border bg-bg px-3 py-1.5 text-[11px] text-muted hover:text-fg">
             Test with your number
           </button>
-          <button className="inline-flex items-center gap-1.5 rounded-[8px] bg-accent px-3 py-1.5 text-[11px] font-medium text-bg hover:bg-[#3aef8d]">
+          <button
+            data-testid="launch-test"
+            className="inline-flex items-center gap-1.5 rounded-[8px] bg-accent px-3 py-1.5 text-[11px] font-medium text-bg hover:bg-[#3aef8d]"
+          >
             <Play className="h-3 w-3" /> Launch test
           </button>
         </div>

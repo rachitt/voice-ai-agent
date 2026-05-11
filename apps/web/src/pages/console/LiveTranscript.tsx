@@ -28,7 +28,7 @@ export function LiveTranscript() {
   }, [lines.length])
 
   return (
-    <div className="panel flex flex-col px-5 py-4">
+    <div className="panel flex flex-col px-5 py-4" data-testid="transcript">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Headphones className="h-4 w-4 text-accent" />
@@ -70,7 +70,11 @@ function Waveform() {
 function Bubble({ line }: { line: TranscriptLine }) {
   const isAgent = line.who === 'agent'
   return (
-    <div className={cn('flex items-start gap-2', isAgent ? '' : 'flex-row-reverse')}>
+    <div
+      data-testid="bubble"
+      data-who={line.who}
+      className={cn('flex items-start gap-2', isAgent ? '' : 'flex-row-reverse')}
+    >
       <div
         className={cn(
           'grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-medium',

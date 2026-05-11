@@ -2,7 +2,7 @@ import { TrendingDown, TrendingUp } from 'lucide-react'
 
 export function TodayCard() {
   return (
-    <div className="panel px-5 py-4">
+    <div className="panel px-5 py-4" data-testid="today">
       <div className="flex items-center justify-between">
         <div className="text-sm font-medium">Today</div>
         <button className="text-[11px] text-muted hover:text-fg">Monthly ↓</button>

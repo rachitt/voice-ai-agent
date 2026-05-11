@@ -88,6 +88,7 @@ function NavItemLink({ to, icon: Icon, label }: NavItem) {
     <NavLink
       to={to}
       end={to === '/'}
+      data-testid={`nav-${label.toLowerCase().replace(/\s+/g, '-')}`}
       className={({ isActive }) =>
         cn(
           'flex items-center gap-3 rounded-[8px] px-3 py-2 text-sm transition-colors',

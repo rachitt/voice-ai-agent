@@ -3,7 +3,7 @@ import { cn } from '@/lib/cn'
 
 export function ToolCallsPanel() {
   return (
-    <div className="panel px-5 py-4">
+    <div className="panel px-5 py-4" data-testid="tool-calls">
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm font-medium">Tool Calls</div>
         <span className="text-[11px] text-muted">last 60s</span>
@@ -19,7 +19,11 @@ export function ToolCallsPanel() {
 
 function Row({ call }: { call: ToolCall }) {
   return (
-    <li className="flex items-center justify-between rounded-[8px] border border-transparent px-2 py-1.5 hover:border-border hover:bg-panel-2">
+    <li
+      data-testid="tool-call-row"
+      data-status={call.status}
+      className="flex items-center justify-between rounded-[8px] border border-transparent px-2 py-1.5 hover:border-border hover:bg-panel-2"
+    >
       <code className="font-mono text-[12px] text-fg">{call.name}</code>
       <div className="flex items-center gap-2">
         {call.ms > 0 && <span className="text-[10px] text-muted">{call.ms}ms</span>}

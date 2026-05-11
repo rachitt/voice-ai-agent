@@ -3,10 +3,14 @@ import { cn } from '@/lib/cn'
 import { KIND_ICON, KIND_TINT } from './icons'
 import type { StepNode as TStepNode } from './types'
 
-export function StepNodeView({ data, selected }: NodeProps<TStepNode>) {
+export function StepNodeView({ id, data, selected }: NodeProps<TStepNode>) {
   const Icon = KIND_ICON[data.kind]
   return (
     <div
+      data-testid="step-node"
+      data-node-id={id}
+      data-kind={data.kind}
+      data-selected={selected ? '1' : '0'}
       className={cn(
         'group relative w-[220px] rounded-[12px] border bg-panel shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)] transition-all',
         selected ? 'border-accent shadow-[0_0_0_1px_var(--color-accent)]' : 'border-border',

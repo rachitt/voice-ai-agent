@@ -11,7 +11,7 @@ import { LaunchHistory } from './LaunchHistory'
 
 export function ConsolePage() {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4" data-testid="console-root">
       <DeploymentChecklist />
 
       <div className="grid grid-cols-12 gap-4">
@@ -40,6 +40,7 @@ export function ConsolePage() {
         </div>
         <NavLink
           to="/builder/demo"
+          data-testid="open-builder"
           className="rounded-[8px] border border-border bg-panel-2 px-3 py-1.5 text-xs text-fg hover:bg-bg"
         >
           Open Builder →

@@ -13,7 +13,7 @@ const ICON: Record<ChecklistStep['key'], React.ComponentType<{ className?: strin
 
 export function DeploymentChecklist() {
   return (
-    <div className="panel px-5 py-4">
+    <div className="panel px-5 py-4" data-testid="checklist">
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-accent" />
@@ -34,7 +34,11 @@ export function DeploymentChecklist() {
 function Step({ step, isLast }: { step: ChecklistStep; isLast: boolean }) {
   const Icon = ICON[step.key]
   return (
-    <li className="relative flex flex-col items-center">
+    <li
+      className="relative flex flex-col items-center"
+      data-testid={`checklist-step-${step.key}`}
+      data-status={step.status}
+    >
       {!isLast && (
         <span
           className={cn(

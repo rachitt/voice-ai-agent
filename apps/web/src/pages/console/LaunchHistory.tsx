@@ -10,7 +10,7 @@ const STATUS_TINT = {
 
 export function LaunchHistory() {
   return (
-    <div className="panel px-5 py-4">
+    <div className="panel px-5 py-4" data-testid="launch-history">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <History className="h-4 w-4 text-muted" />

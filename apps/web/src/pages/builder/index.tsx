@@ -7,7 +7,10 @@ import { NodeInspector } from './NodeInspector'
 export function BuilderPage() {
   const { agentId = 'demo' } = useParams()
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-bg text-fg">
+    <div
+      data-testid="builder-root"
+      className="flex h-screen w-screen flex-col overflow-hidden bg-bg text-fg"
+    >
       <BuilderTopbar agentId={agentId} />
       <div className="flex min-h-0 flex-1">
         <StepPalette />
