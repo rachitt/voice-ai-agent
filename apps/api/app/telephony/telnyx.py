@@ -47,6 +47,24 @@ class TelnyxClient:
         r.raise_for_status()
         return r.json()
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=5), reraise=True)
+    async def answer(
+        self,
+        call_control_id: str,
+        *,
+        stream_url: str | None = None,
+        stream_track: str = "both_tracks",
+    ) -> dict:
+        body: dict = {}
+        if stream_url:
+            body["stream_url"] = stream_url
+            body["stream_track"] = stream_track
+        r = await self._client.post(
+            f"/calls/{call_control_id}/actions/answer", json=body
+        )
+        r.raise_for_status()
+        return r.json()
+
     async def hangup(self, call_control_id: str) -> None:
         r = await self._client.post(f"/calls/{call_control_id}/actions/hangup")
         if r.status_code >= 400:
