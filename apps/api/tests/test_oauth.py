@@ -143,3 +143,24 @@ def test_session_rejects_tampered():
     tok = mint_session("usr_x", "org_y")
     bad = tok[:-3] + "AAA"
     assert verify_session(bad) is None
+
+
+@pytest.mark.asyncio
+async def test_login_state_cookie_secure_in_prod(client, monkeypatch):
+    cfg.get_settings.cache_clear()
+    monkeypatch.setenv("VOICE_ENV", "prod")
+    try:
+        r = await client.get("/v1/auth/login/google", follow_redirects=False)
+        assert r.status_code == 302
+        set_cookie = r.headers.get("set-cookie", "")
+        assert "Secure" in set_cookie
+    finally:
+        cfg.get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_login_state_cookie_not_secure_in_dev(client):
+    cfg.get_settings.cache_clear()
+    r = await client.get("/v1/auth/login/google", follow_redirects=False)
+    set_cookie = r.headers.get("set-cookie", "")
+    assert "Secure" not in set_cookie

@@ -47,6 +47,11 @@ GOOGLE_USERINFO = "https://openidconnect.googleapis.com/v1/userinfo"
 STATE_COOKIE = "voice_oauth_state"
 
 
+def _secure_cookie() -> bool:
+    """Secure flag on every non-dev env. Dev keeps it off so localhost (no TLS) works."""
+    return get_settings().env != "dev"
+
+
 def _slugify(s: str) -> str:
     out = "".join(c.lower() if c.isalnum() else "-" for c in s)
     return out.strip("-")[:60] or "user"
@@ -82,7 +87,7 @@ async def login_google() -> RedirectResponse:
     resp = RedirectResponse(url=f"{GOOGLE_AUTH}?{urlencode(params)}", status_code=302)
     resp.set_cookie(
         STATE_COOKIE, state,
-        max_age=600, httponly=True, samesite="lax", secure=False,
+        max_age=600, httponly=True, samesite="lax", secure=_secure_cookie(),
     )
     return resp
 
@@ -143,7 +148,7 @@ async def callback_google(
         max_age=s.session_ttl_seconds,
         httponly=True,
         samesite="lax",
-        secure=False,  # set true in prod
+        secure=_secure_cookie(),
         path="/",
     )
     resp.delete_cookie(STATE_COOKIE, path="/")
@@ -180,7 +185,13 @@ async def me(
 @router.post("/logout")
 async def logout(response: Response) -> dict[str, bool]:
     s = get_settings()
-    response.delete_cookie(s.session_cookie_name, path="/")
+    response.delete_cookie(
+        s.session_cookie_name,
+        path="/",
+        secure=_secure_cookie(),
+        httponly=True,
+        samesite="lax",
+    )
     return {"ok": True}
 
 
