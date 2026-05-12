@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Copy, Key, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { apiKeys, type ApiKeyRow } from '@/lib/api'
 import { useAuth } from '@/lib/useAuth'
+import { ApiErrorBanner } from '@/components/ApiErrorBanner'
 
 export function SettingsPage() {
   const { loading, signedIn } = useAuth()
@@ -106,11 +107,7 @@ function ApiKeysSection() {
         </div>
       </header>
 
-      {err && (
-        <div className="border-b border-border bg-danger/10 px-5 py-2 text-xs text-danger">
-          {err}
-        </div>
-      )}
+      <ApiErrorBanner err={err} variant="stripe" />
 
       {revealed && (
         <RevealedKey

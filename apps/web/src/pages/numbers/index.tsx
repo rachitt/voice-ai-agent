@@ -7,6 +7,7 @@ import {
   type PhoneNumber,
 } from '@/lib/api'
 import { cn } from '@/lib/cn'
+import { ApiErrorBanner } from '@/components/ApiErrorBanner'
 
 export function NumbersPage() {
   const [rows, setRows] = useState<PhoneNumber[] | null>(null)
@@ -124,11 +125,7 @@ export function NumbersPage() {
           </div>
         </header>
 
-        {err && (
-          <div className="border-b border-border bg-danger/10 px-5 py-2 text-xs text-danger">
-            {err}
-          </div>
-        )}
+        <ApiErrorBanner err={err} variant="stripe" />
 
         {showNew && (
           <div className="flex flex-wrap items-center gap-2 border-b border-border bg-panel-2 px-5 py-3">

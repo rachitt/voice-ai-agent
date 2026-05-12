@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Check, Pencil, Plus, RefreshCw, Trash2, Wrench, X } from 'lucide-react'
 import { tools, type ToolRow } from '@/lib/api'
+import { ApiErrorBanner } from '@/components/ApiErrorBanner'
 
 interface FormState {
   name: string
@@ -168,11 +169,7 @@ export function ToolsPage() {
           </div>
         </header>
 
-        {err && (
-          <div className="border-b border-border bg-danger/10 px-5 py-2 text-xs text-danger">
-            {err}
-          </div>
-        )}
+        <ApiErrorBanner err={err} variant="stripe" />
 
         {showNew && (
           <div className="grid gap-3 border-b border-border bg-panel-2 px-5 py-4">
