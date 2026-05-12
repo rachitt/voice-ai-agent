@@ -152,6 +152,10 @@ jobs:
         # `tsc -b --pretty false` keeps logs grepable in CI.
         run: pnpm exec tsc -b --pretty false
 
+      - name: Unit tests (vitest)
+        working-directory: apps/web
+        run: pnpm test
+
       - name: Build
         working-directory: apps/web
         run: pnpm build

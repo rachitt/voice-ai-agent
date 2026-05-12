@@ -28,7 +28,9 @@ export function parseApiError(raw: string | null): {
     const summary =
       errors.length === 1
         ? errors[0]
-        : `${errors.length} ${field ?? ''} errors`.trim()
+        : field
+          ? `${errors.length} ${field} errors`
+          : `${errors.length} errors`
     return { summary, tooltip: errors.join('\n'), errors, field }
   } catch {
     return null
