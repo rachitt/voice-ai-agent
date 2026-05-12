@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { ArrowLeft, Check, ChevronDown, Loader2, Phone, TriangleAlert, Upload } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
+import { parseApiError } from '@/lib/parseApiError'
 import { useBuilder } from './store'
 import { TestCallModal } from './TestCallModal'
 
@@ -40,20 +41,8 @@ export function BuilderTopbar({ agentId }: { agentId: string }) {
       setSaveStatus('saved')
     } catch (e) {
       const msg = String(e)
-      // Try parse our 422 {errors,warnings} payload from the message body.
-      const m = msg.match(/\{[\s\S]*\}/)
-      if (m) {
-        try {
-          const body = JSON.parse(m[0])
-          if (body?.detail?.errors) {
-            setPublishErrors(body.detail.errors as string[])
-            return
-          }
-        } catch {
-          // fall through
-        }
-      }
-      setPublishErrors([msg])
+      const parsed = parseApiError(msg)
+      setPublishErrors(parsed?.errors ?? [msg])
     } finally {
       setPublishing(false)
     }
@@ -236,33 +225,7 @@ function SaveStatusPill({ status, error }: { status: string; error: string | nul
   )
 }
 
-/**
- * Save errors from the API are stringified `Error` objects whose message
- * carries the raw response body. Pull `detail.errors` out when present so
- * the user sees "summary_prompt must be a string" instead of a wall of JSON.
- */
-function parseSaveError(
-  raw: string | null,
-): { summary: string; tooltip: string; errors: string[]; field?: string } | null {
-  if (!raw) return null
-  const match = raw.match(/\{[\s\S]*\}/)
-  if (!match) return null
-  try {
-    const body = JSON.parse(match[0]) as {
-      detail?: { errors?: string[]; field?: string }
-    }
-    const errors = body.detail?.errors
-    if (!errors || errors.length === 0) return null
-    const field = body.detail?.field
-    const summary =
-      errors.length === 1
-        ? errors[0]
-        : `${errors.length} ${field ?? ''} errors`.trim()
-    return { summary, tooltip: errors.join('\n'), errors, field }
-  } catch {
-    return null
-  }
-}
+const parseSaveError = parseApiError
 
 function Tabs() {
   return (

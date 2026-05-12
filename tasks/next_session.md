@@ -1,36 +1,29 @@
 # Next Session
 
-## Session ending 2026-05-12 — backlog burn-down
+## Session ending 2026-05-12 (cont.) — backlog cleanup #2
 
-Resolved alembic drift via new migration `5d2fbb0a9c01_add_published_version_fk`
-(initial migration emitted the use_alter FK only into CREATE TABLE and the
-constraint was never created server-side); alembic check is now a hard CI
-gate. Triaged React-19 lint to zero: e2e specs got a shared
-`BuilderHandle` type, page-level data-loading effects got narrow disables
-with rationale, knowledge page key-collision fixed by using positional keys.
-`pnpm lint` is now a hard CI gate. Backend coverage 63% → 77% via new tests
-for storage/s3, telephony/telnyx, tools/builtins, pipeline/tts, agents
-router (404 + analysis_plan validation paths), squads router CRUD, KB
-router CRUD, and inbound webhook event paths (bad json / bad sig / answered
-/ hangup duration / answer failure). Root-cause fix for missed coverage:
-added `[tool.coverage.run] concurrency = ["thread","greenlet"]` to
-pyproject so handlers running inside anyio task groups get traced.
-`--cov-fail-under` raised to 70. SaveStatusPill now opens a dropdown
-listing every parsed `analysis_plan` error with field label header;
-click-outside dismiss + auto-close on status change.
+Coverage climbed 77% → 82%. New tests: pipeline/llm (100%), pipeline/stt
+(96%), web_call_ws + telnyx_media_ws helpers (_emit/_emit_pstn,
+_upload_recording, _finalise, _build_agent_config, _resolve_tools) via a
+FakeWS double. `--cov-fail-under` raised to 75. New e2e:
+SaveStatusPill error dropdown — autosave triggers 422 from PATCH, pill
+shows "2 analysis_plan errors", click opens listbox with two items,
+outside-click dismisses. Error-UI parity audit landed: extracted
+`lib/parseApiError.ts` (shared parser) and `components/ApiErrorBanner.tsx`
+(banner that prefers parsed list over raw string). BuilderTopbar publish
++ SaveStatusPill now use the shared parser; web-call page uses the
+banner.
 
 ## For next session
 
-1. Branch protection on `main` still needs to be flipped in repo settings
-   per `CONTRIBUTING.md` checklist (server-side push gating).
-2. Cover the remaining cold spots: `routers/telnyx_media_ws.py` (17%),
-   `routers/web_call_ws.py` (25%), `pipeline/stt.py` (30%),
-   `pipeline/llm.py` (35%). All are streaming/WS surfaces — likely
-   needs MockTransport + websockets fakes similar to the new tts/telnyx
-   patterns. Then bump `--cov-fail-under` to 75.
-3. Add an e2e playwright test for the new SaveStatusPill dropdown:
-   force a 422 from patch agent, assert dropdown lists items + closes
-   on outside click.
-4. Audit other places that show "error string only" UI for parsed-error
-   parity (publish errors on BuilderTopbar already render as a list —
-   confirm consistent styling).
+1. Branch protection on `main` still pending in repo settings.
+2. Remaining WS handler coverage: `telnyx_media_ws.py` 33% and
+   `web_call_ws.py` 48% — the session loop (receive → STT push → drain)
+   is the uncovered block. Approach: monkeypatch `SessionLocal` so the
+   route binds to the test DB, then drive via starlette TestClient
+   `websocket_connect`. Should unlock another ~5% total.
+3. Apply `ApiErrorBanner` to settings/tools/numbers/knowledge pages
+   (calls list + detail intentionally skipped due to non-banner
+   layouts).
+4. Investigate `routers/calls.py` (48%) cold spots — list endpoint
+   filters + presign endpoint branches.

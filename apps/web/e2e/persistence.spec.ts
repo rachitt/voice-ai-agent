@@ -240,4 +240,67 @@ test.describe('Builder ↔ API persistence', () => {
     await expect(page.getByTestId('publish-errors')).toBeVisible()
     await expect(page.getByTestId('publish-errors')).toContainText('greeting')
   })
+
+  test('save-status pill opens dropdown with parsed analysis_plan errors', async ({ page }) => {
+    const fg = {
+      nodes: [
+        { id: 'g', type: 'step', position: { x: 0, y: 0 }, data: { kind: 'greeting', title: 'G' } },
+        { id: 'e', type: 'step', position: { x: 0, y: 200 }, data: { kind: 'end', title: 'E' } },
+      ],
+      edges: [{ id: 'g->e', source: 'g', target: 'e', type: 'smoothstep' }],
+    }
+    await page.route(`${API_BASE}/v1/agents/ag_err`, (route: Route) => {
+      if (route.request().method() === 'GET') {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(makeAgent('ag_err', 'Errs', fg)),
+        })
+      }
+      // PATCH → 422 with two analysis_plan errors
+      return route.fulfill({
+        status: 422,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          detail: {
+            field: 'analysis_plan',
+            errors: [
+              'summary_prompt must be a string',
+              'structured_data_schema must be an object',
+            ],
+          },
+        }),
+      })
+    })
+
+    await page.goto('/builder/ag_err')
+    await expect(page.getByTestId('builder-agent-name')).toContainText('Errs')
+
+    // Trigger autosave by editing the agent meta — easiest is to push a store
+    // change that the autosave watcher picks up. We addNode to dirty the graph.
+    await page.evaluate(() => {
+      const s = (window as unknown as { __voiceBuilder?: BuilderHandle }).__voiceBuilder!
+      s.getState().addNode('collect', { x: 200, y: 200 })
+    })
+
+    // Pill enters error state w/ summarised count
+    const pill = page.getByTestId('save-status')
+    await expect(pill).toHaveAttribute('data-status', 'error', { timeout: 5000 })
+    await expect(pill).toContainText('2 analysis_plan errors')
+
+    // Closed initially
+    await expect(page.getByTestId('save-error-list')).toHaveCount(0)
+
+    // Click opens dropdown w/ both errors
+    await pill.click()
+    const list = page.getByTestId('save-error-list')
+    await expect(list).toBeVisible()
+    await expect(page.getByTestId('save-error-item')).toHaveCount(2)
+    await expect(list).toContainText('summary_prompt must be a string')
+    await expect(list).toContainText('structured_data_schema must be an object')
+
+    // Click outside dismisses
+    await page.locator('body').click({ position: { x: 5, y: 5 } })
+    await expect(page.getByTestId('save-error-list')).toHaveCount(0)
+  })
 })
