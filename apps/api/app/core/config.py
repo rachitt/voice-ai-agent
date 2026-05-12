@@ -32,10 +32,6 @@ class Settings(BaseSettings):
     session_ttl_seconds: int = Field(60 * 60 * 24 * 14)  # 14 days
     web_app_base_url: str = Field("http://localhost:5173")
 
-    livekit_url: str = Field("ws://localhost:7880")
-    livekit_api_key: str = Field("devkey")
-    livekit_api_secret: str = Field("devsecret-32-chars-min-for-livekit-jwt")
-
     telnyx_api_key: str = Field("")
     telnyx_webhook_public_key: str = Field("")
     telnyx_connection_id: str = Field("")
@@ -47,7 +43,15 @@ class Settings(BaseSettings):
     webhook_hmac_secret: str = Field("dev-hmac-secret-rotate-in-prod")
     api_key_pepper: str = Field("dev-pepper-rotate-in-prod")
 
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173", "http://localhost:5174"])
+    cors_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:5173",
+            "http://localhost:5174",
+            "http://localhost:5175",
+            "http://localhost:5176",
+            "http://localhost:5179",
+        ]
+    )
 
     # Public URL that Telnyx + other webhooks can reach (override in prod).
     public_base_url: str = Field("http://localhost:8000")
