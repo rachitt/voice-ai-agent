@@ -1,26 +1,31 @@
 # Next Session
 
-## Session ending 2026-05-12 (cont. #4) — WS session coverage
+## Session ending 2026-05-12 (cont. #5) — sweep + RTL
 
-WS session-loop coverage finally cracked: starlette TestClient
-`websocket_connect` drives both `web_call_ws` (text-only + binary PCM
-frame paths) and `telnyx_media_ws` (start/media/stop envelopes, decode
-errors, garbage frames). Trick: a `LoopBoundSessionLocal` proxy
-patches the router's `SessionLocal` to lazily build a fresh
-`async_sessionmaker` per event loop (TestClient runs the app in its
-own thread/loop). FakePipeline + FakeDG replace LLM/TTS/STT for the
-session shell. Helpers `_seed_call_sync` / `_read_call_state` run
-one-shot operations in fresh event loops so we sidestep
-"future attached to a different loop". telnyx_media_ws 33% → 76%,
-web_call_ws 48% → 82%, total 84% → **89%**. `--cov-fail-under` raised
-to 80. 306 pytest, 53 e2e, 8 vitest.
+Coverage 89% → **91%**. analysis/runner, analysis/scheduler,
+webhooks/dispatcher, kb/loaders, routers/catalog, workers/kb_ingest
+all now 100%. `--cov-fail-under` raised to 85. New tests cover
+legacy plan fallback, structured-json + success-json error envelopes,
+catalog ElevenLabs HTTP via `httpx.MockTransport`, pdf/docx loaders,
+arq enqueue + WorkerSettings, dispatcher max-attempts → dead +
+backoff branch + network exception + run_forever cancel/tick-error.
+
+SaveStatusPill extracted to its own module + first vitest component
+test (`@testing-library/react` + jsdom). 9 cases: idle/saving/saved
+states, plain error vs dropdown trigger, click-open, click-close,
+outside-mousedown dismiss, auto-close on status transition.
+`tsconfig.app.json` now declares `vitest/globals` +
+`@testing-library/jest-dom` types so `tsc -b` accepts the matchers.
+
+334 pytest, 53 playwright, 17 vitest.
 
 ## For next session
 
 1. Branch protection on `main` still pending in repo settings.
-2. vitest component test for SaveStatusPill open/close + outside-click
-   (needs `@testing-library/react` + jsdom env).
-3. Push `--cov-fail-under` to 85 after one more cold-spot sweep:
-   `analysis/scheduler.py`, `analysis/runner.py`, `webhooks/dispatcher.py`.
-4. LiveKit config is dead — `livekit_*` settings have no callers.
-   Either remove or wire up.
+2. Push gate to 88 after another sweep:
+   `flow_executor.py` (82%), `web_call_ws.py` (82%), `auth_oauth.py`
+   (79%), `pipeline/web_session.py` (80%) are next-biggest gaps.
+3. LiveKit config still dead. Decide: wire it up (replaces deepgram +
+   elevenlabs streaming?) or delete the settings.
+4. Capture how many tests exist in CONTRIBUTING.md so contributors know
+   the bar.
