@@ -12,10 +12,13 @@
 - While committing, keep commit messages short and concise and dont use co-authored tags.
 - While executing tasks, try to work on multiple git worktrees to accelerate the dev process. 
 - Create worktrees for features which are independent to avoid merge conflicts. Merging worktrees should happen sequentially as well.
+- Create a new branch while working on a new feature
+- Create a PR and do a full PR review before merging into main
 
 ### Security
 - Work like a senior software engineer while writing code and always prioritize on security.
-- Make sure to always add security measures while designing and creating API's.
+- auth on every endpoint, secrets via env vars not commits, input validation on WebSocket payloads, rate limits on the LLM/TTS proxies, PII handling for call recordings. 
+- Voice AI has specific security shapes (recording consent, audio storage encryption, prompt injection via transcribed speech)
 
 ### Verification before done
 - Never mark a task complete without proving it works
