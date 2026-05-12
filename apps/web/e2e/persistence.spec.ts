@@ -1,4 +1,5 @@
 import { expect, test, type Route } from '@playwright/test'
+import type { BuilderHandle } from './_builder-handle'
 
 const API_BASE = 'http://localhost:8000'
 
@@ -139,7 +140,7 @@ test.describe('Builder ↔ API persistence', () => {
     await expect(page.getByTestId('step-node')).toHaveCount(2)
     // Trigger an edit via store: add a collect node
     await page.evaluate(() => {
-      const s = (window as unknown as { __voiceBuilder?: any }).__voiceBuilder!
+      const s = (window as unknown as { __voiceBuilder?: BuilderHandle }).__voiceBuilder!
       s.getState().addNode('collect', { x: 100, y: 100 })
     })
     // Wait for autosave roundtrip (1500 ms debounce + req). Status may flick

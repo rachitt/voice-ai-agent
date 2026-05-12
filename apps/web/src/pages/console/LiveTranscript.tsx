@@ -17,6 +17,7 @@ export function LiveTranscript() {
   useEffect(() => {
     esRef.current?.close()
     esRef.current = null
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- callId change resets transcript view + opens new SSE
     setLines([])
     setLive(false)
     setErr(null)

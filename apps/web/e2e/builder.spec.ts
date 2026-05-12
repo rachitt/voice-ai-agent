@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import type { BuilderHandle, BuilderEdge } from './_builder-handle'
 
 test.describe('Agent Builder', () => {
   test.beforeEach(async ({ page }) => {
@@ -135,7 +136,7 @@ test.describe('Agent Builder', () => {
   test('rejects self-loop connection', async ({ page }) => {
     const before = await page.locator('.react-flow__edge').count()
     const err = await page.evaluate(() => {
-      const s = (window as unknown as { __voiceBuilder?: any }).__voiceBuilder!
+      const s = (window as unknown as { __voiceBuilder?: BuilderHandle }).__voiceBuilder!
       s.getState().onConnect({ source: 'greet', target: 'greet' })
       return s.getState().connectionError
     })
@@ -147,7 +148,7 @@ test.describe('Agent Builder', () => {
   test('rejects inbound to greeting', async ({ page }) => {
     const before = await page.locator('.react-flow__edge').count()
     const err = await page.evaluate(() => {
-      const s = (window as unknown as { __voiceBuilder?: any }).__voiceBuilder!
+      const s = (window as unknown as { __voiceBuilder?: BuilderHandle }).__voiceBuilder!
       s.getState().onConnect({ source: 'collect-name', target: 'greet' })
       return s.getState().connectionError
     })
@@ -158,7 +159,7 @@ test.describe('Agent Builder', () => {
   test('rejects outbound from end (terminal)', async ({ page }) => {
     const before = await page.locator('.react-flow__edge').count()
     const err = await page.evaluate(() => {
-      const s = (window as unknown as { __voiceBuilder?: any }).__voiceBuilder!
+      const s = (window as unknown as { __voiceBuilder?: BuilderHandle }).__voiceBuilder!
       s.getState().onConnect({ source: 'end', target: 'greet' })
       return s.getState().connectionError
     })
@@ -170,7 +171,7 @@ test.describe('Agent Builder', () => {
     // greet already has 1 outbound (greet->collect-name). Adding a 2nd must fail.
     const before = await page.locator('.react-flow__edge').count()
     const err = await page.evaluate(() => {
-      const s = (window as unknown as { __voiceBuilder?: any }).__voiceBuilder!
+      const s = (window as unknown as { __voiceBuilder?: BuilderHandle }).__voiceBuilder!
       s.getState().onConnect({ source: 'greet', target: 'api' })
       return s.getState().connectionError
     })
@@ -182,14 +183,14 @@ test.describe('Agent Builder', () => {
     // Add a fresh collect node and try to connect from cond (which already has yes+no in seed).
     // Strategy: remove one existing condition edge first, then attempt a new connection.
     await page.evaluate(() => {
-      const s = (window as unknown as { __voiceBuilder?: any }).__voiceBuilder!
+      const s = (window as unknown as { __voiceBuilder?: BuilderHandle }).__voiceBuilder!
       const st = s.getState()
       // Delete the 'no' branch edge so we can re-open the dialog.
       st.onEdgesChange([{ id: 'cond->vm', type: 'remove' }])
     })
 
     await page.evaluate(() => {
-      const s = (window as unknown as { __voiceBuilder?: any }).__voiceBuilder!
+      const s = (window as unknown as { __voiceBuilder?: BuilderHandle }).__voiceBuilder!
       s.getState().onConnect({ source: 'cond', target: 'vm' })
     })
     await expect(page.getByTestId('branch-dialog')).toBeVisible()
@@ -199,11 +200,11 @@ test.describe('Agent Builder', () => {
     await expect(page.getByTestId('branch-dialog')).toHaveCount(0)
     // Edge added with label 'no'
     const labels = await page.evaluate(() => {
-      const s = (window as unknown as { __voiceBuilder?: any }).__voiceBuilder!
+      const s = (window as unknown as { __voiceBuilder?: BuilderHandle }).__voiceBuilder!
       return s
         .getState()
-        .edges.filter((e: any) => e.source === 'cond')
-        .map((e: any) => e.label)
+        .edges.filter((e: BuilderEdge) => e.source === 'cond')
+        .map((e: BuilderEdge) => e.label)
     })
     expect(labels).toEqual(expect.arrayContaining(['yes', 'no']))
   })
@@ -211,7 +212,7 @@ test.describe('Agent Builder', () => {
   test('condition rejects 3rd branch', async ({ page }) => {
     // Seed already has 2 outbound from cond. 3rd attempt must reject.
     const err = await page.evaluate(() => {
-      const s = (window as unknown as { __voiceBuilder?: any }).__voiceBuilder!
+      const s = (window as unknown as { __voiceBuilder?: BuilderHandle }).__voiceBuilder!
       s.getState().onConnect({ source: 'cond', target: 'api' })
       return s.getState().connectionError
     })

@@ -46,6 +46,7 @@ export function CallsPage() {
   )
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- filter change resets list state + triggers fetch
     setItems([])
     setCursor(null)
     setHasMore(false)
@@ -196,14 +197,17 @@ function CallDetailPanel({ id }: { id: string }) {
   const [err, setErr] = useState<string | null>(null)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [audioErr, setAudioErr] = useState<string | null>(null)
+  const [audioPending, setAudioPending] = useState(false)
   const blobRef = useRef<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- id change resets detail panel state before fetching new call
     setDetail(null)
     setErr(null)
     setAudioUrl(null)
     setAudioErr(null)
+    setAudioPending(false)
     if (blobRef.current) {
       URL.revokeObjectURL(blobRef.current)
       blobRef.current = null
@@ -215,16 +219,52 @@ function CallDetailPanel({ id }: { id: string }) {
         if (cancelled) return
         setDetail(d)
         if (d.recording_s3_key || d.has_recording) {
+          // Prefer a short-lived presigned URL (no streaming through the API
+          // process). Fall back to bearer-auth blob fetch when presign is
+          // unavailable (dev w/o MinIO, etc.).
           calls
-            .recordingBlob(id)
-            .then((blob) => {
+            .recordingUrl(id)
+            .then((res) => {
               if (cancelled) return
-              const url = URL.createObjectURL(blob)
-              blobRef.current = url
-              setAudioUrl(url)
+              if (res.url) {
+                setAudioUrl(res.url)
+                return
+              }
+              return calls.recordingBlob(id).then((blob) => {
+                if (cancelled) return
+                const url = URL.createObjectURL(blob)
+                blobRef.current = url
+                setAudioUrl(url)
+              })
             })
             .catch((e) => {
-              if (!cancelled) setAudioErr(String(e))
+              if (cancelled) return
+              const msg = String(e)
+              // 404 with `has_recording=true` listing-side = call is logged
+              // but the WAV hasn't landed in object storage yet (post-call
+              // upload is async). Surface as "still uploading" so users
+              // don't see an error for the normal race.
+              if (msg.includes('404') && d.has_recording && !d.recording_s3_key) {
+                setAudioPending(true)
+                return
+              }
+              calls
+                .recordingBlob(id)
+                .then((blob) => {
+                  if (cancelled) return
+                  const url = URL.createObjectURL(blob)
+                  blobRef.current = url
+                  setAudioUrl(url)
+                })
+                .catch((fallbackErr) => {
+                  if (cancelled) return
+                  const fbMsg = String(fallbackErr)
+                  if (fbMsg.includes('404')) {
+                    setAudioPending(true)
+                  } else {
+                    setAudioErr(`${e}; fallback: ${fallbackErr}`)
+                  }
+                })
             })
         }
       })
@@ -286,9 +326,13 @@ function CallDetailPanel({ id }: { id: string }) {
         )}
       </header>
 
-      {(detail.has_recording || audioUrl || audioErr) && (
+      {(detail.has_recording || audioUrl || audioErr || audioPending) && (
         <div className="border-b border-border bg-panel-2 px-5 py-3">
-          {audioErr ? (
+          {audioPending ? (
+            <div className="text-[11px] text-muted" data-testid="audio-pending">
+              recording still uploading — check back in a moment.
+            </div>
+          ) : audioErr ? (
             <div className="text-[11px] text-danger" data-testid="audio-err">
               recording error: {audioErr}
             </div>

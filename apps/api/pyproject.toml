@@ -37,6 +37,7 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "pytest-cov>=6.0",
+    "pytest-xdist>=3.6",
     "ruff>=0.7",
     "mypy>=1.13",
     "httpx>=0.28",
@@ -64,8 +65,16 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S105", "S106", "S311", "S608"]
+"tests/**" = ["S105", "S106", "S311", "S608", "N802"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.coverage.run]
+# AsyncClient + ASGITransport run route handlers via anyio task groups,
+# which use threads under the hood — without `concurrency = ["thread"]`
+# coverage misses lines executed inside FastAPI route bodies and the
+# numbers underreport by ~20 points.
+concurrency = ["thread", "greenlet"]
+source = ["app"]

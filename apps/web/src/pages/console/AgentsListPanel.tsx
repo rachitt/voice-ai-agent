@@ -29,6 +29,7 @@ export function AgentsListPanel() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- auth state change triggers agents refetch
     if (!showAuth) load()
   }, [showAuth])
 

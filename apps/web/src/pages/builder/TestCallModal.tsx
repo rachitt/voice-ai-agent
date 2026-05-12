@@ -8,9 +8,11 @@ type TranscriptLine = { role: 'user' | 'agent' | 'system'; text: string; at: num
 
 export function TestCallModal({
   agentId,
+  agentVariableDefaults,
   onClose,
 }: {
   agentId: string
+  agentVariableDefaults?: Record<string, unknown>
   onClose: () => void
 }) {
   const [status, setStatus] = useState<'connecting' | 'live' | 'closed' | 'error'>('connecting')
@@ -18,6 +20,14 @@ export function TestCallModal({
   const [transcript, setTranscript] = useState<TranscriptLine[]>([])
   const [textOnly, setTextOnly] = useState(false)
   const [textInput, setTextInput] = useState('')
+  const [overrides, setOverrides] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      Object.entries(agentVariableDefaults || {}).map(([k, v]) => [
+        k,
+        typeof v === 'string' ? v : JSON.stringify(v),
+      ]),
+    ),
+  )
   const clientRef = useRef<WebCallClient | null>(null)
   const startedRef = useRef(false)
 
@@ -30,7 +40,7 @@ export function TestCallModal({
       return
     }
     try {
-      const created = await api.createWebCall(agentId)
+      const created = await api.createWebCall(agentId, overrides)
       try {
         localStorage.setItem('voice2.watch_call_id', created.id)
       } catch {
@@ -84,6 +94,7 @@ export function TestCallModal({
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- start() drives WS lifecycle + sets state on connect events
     start(textOnly)
     return () => {
       clientRef.current?.hangup()
@@ -143,6 +154,35 @@ export function TestCallModal({
             text-only (skip mic + STT)
           </label>
         </div>
+
+        {Object.keys(overrides).length > 0 && (
+          <div
+            data-testid="tc-overrides"
+            className="border-b border-border px-4 py-2"
+          >
+            <div className="mb-1 text-[10px] uppercase tracking-wider text-muted">
+              Dynamic variables (override per-call)
+            </div>
+            <ul className="flex flex-col gap-1.5">
+              {Object.entries(overrides).map(([k, v]) => (
+                <li key={k} className="flex items-center gap-1.5">
+                  <code className="w-1/3 truncate rounded-[6px] border border-border bg-panel-2 px-2 py-1 text-[10px] text-muted">
+                    {k}
+                  </code>
+                  <input
+                    data-testid={`tc-override-${k}`}
+                    value={v}
+                    disabled={status === 'live'}
+                    onChange={(e) =>
+                      setOverrides((o) => ({ ...o, [k]: e.target.value }))
+                    }
+                    className="flex-1 rounded border border-border bg-panel-2 px-2 py-1 text-[11px] disabled:opacity-60"
+                  />
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div
           data-testid="test-call-transcript"
