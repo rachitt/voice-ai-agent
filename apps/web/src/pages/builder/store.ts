@@ -122,6 +122,8 @@ const nextId = (kind: string) => `${kind}-${Date.now().toString(36)}-${counter++
 const TITLES: Record<StepKind, string> = {
   greeting: 'Greeting',
   collect: 'Collect Info',
+  slot_fill: 'Slot Fill',
+  tool_call: 'Tool Call',
   api: 'API Call',
   condition: 'Condition',
   transfer: 'Transfer',

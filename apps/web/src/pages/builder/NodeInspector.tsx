@@ -5,14 +5,14 @@ import { RULES } from './connection-rules'
 import { KIND_ICON, KIND_TINT } from './icons'
 import { cn } from '@/lib/cn'
 import { catalog, type CatalogModel, type CatalogVoice } from '@/lib/api'
-import type { RetryPolicy, StepData } from './types'
+import type { RetryPolicy, SlotSpec, StepData } from './types'
 
 const MODEL_FALLBACK: CatalogModel[] = [
   { id: 'gemini/gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite', vendor: 'google', tier: 'fast' },
   { id: 'gpt-4o-mini', label: 'GPT-4o mini', vendor: 'openai', tier: 'fast' },
 ]
 const VOICE_FALLBACK: CatalogVoice[] = [
-  { id: '21m00Tcm4TlvDq8ikWAM', label: 'Rachel', vendor: 'elevenlabs', latency: 'fast' },
+  { id: 'EXAVITQu4vr4xnSDxMaL', label: 'Sarah', vendor: 'elevenlabs', latency: 'fast' },
 ]
 
 const TAB_KEYS = ['Settings', 'Transitions'] as const
@@ -137,6 +137,17 @@ export function NodeInspector() {
             placeholder="What's your voice agent's job here?"
           />
         </Field>
+
+        {node.data.kind === 'slot_fill' && (
+          <SlotEditor
+            slots={node.data.slots ?? []}
+            onChange={(slots) => set({ slots })}
+          />
+        )}
+
+        {node.data.kind === 'tool_call' && (
+          <ToolCallEditor data={node.data} onPatch={set} />
+        )}
 
         {node.data.kind === 'kb_lookup' && (
           <>
@@ -611,5 +622,242 @@ function Select({
         </option>
       ))}
     </select>
+  )
+}
+
+const SLOT_TYPES: SlotSpec['type'][] = [
+  'string',
+  'number',
+  'email',
+  'phone',
+  'date',
+  'iso_datetime',
+]
+
+function SlotEditor({
+  slots,
+  onChange,
+}: {
+  slots: SlotSpec[]
+  onChange: (next: SlotSpec[]) => void
+}) {
+  const patch = (i: number, p: Partial<SlotSpec>) =>
+    onChange(slots.map((s, idx) => (idx === i ? { ...s, ...p } : s)))
+  const remove = (i: number) => onChange(slots.filter((_, idx) => idx !== i))
+  const add = () =>
+    onChange([
+      ...slots,
+      { name: '', prompt: '', required: true, type: 'string' satisfies SlotSpec['type'] },
+    ])
+
+  return (
+    <Field label="Slots" hint="Required fields collected before advancing">
+      <div className="space-y-2">
+        {slots.length === 0 && (
+          <div className="rounded-[8px] border border-dashed border-border px-3 py-2 text-[11px] text-muted">
+            No slots yet — add one to start gathering.
+          </div>
+        )}
+        {slots.map((s, i) => (
+          <div
+            key={i}
+            data-testid={`slot-row-${i}`}
+            className="space-y-1.5 rounded-[8px] border border-border bg-panel-2 p-2"
+          >
+            <div className="flex gap-2">
+              <input
+                data-testid={`slot-name-${i}`}
+                className={cn(inputCls, 'flex-1 font-mono')}
+                value={s.name}
+                onChange={(e) => patch(i, { name: e.target.value })}
+                placeholder="slot_name"
+              />
+              <Select
+                value={s.type ?? 'string'}
+                onChange={(v) => patch(i, { type: v as SlotSpec['type'] })}
+                options={SLOT_TYPES as unknown as string[]}
+              />
+              <button
+                type="button"
+                data-testid={`slot-remove-${i}`}
+                title="Remove slot"
+                onClick={() => remove(i)}
+                className="grid h-7 w-7 place-items-center rounded-[8px] border border-border bg-panel text-muted hover:border-red-500/40 hover:text-red-400"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <input
+              data-testid={`slot-prompt-${i}`}
+              className={inputCls}
+              value={s.prompt ?? ''}
+              onChange={(e) => patch(i, { prompt: e.target.value })}
+              placeholder="How to ask the user for this"
+            />
+            <label className="flex items-center gap-2 text-[11px] text-muted">
+              <input
+                type="checkbox"
+                checked={s.required !== false}
+                onChange={(e) => patch(i, { required: e.target.checked })}
+              />
+              required
+            </label>
+          </div>
+        ))}
+        <button
+          type="button"
+          data-testid="slot-add"
+          onClick={add}
+          className="w-full rounded-[8px] border border-dashed border-border px-2 py-1.5 text-[11px] text-muted hover:border-accent hover:text-fg"
+        >
+          + add slot
+        </button>
+      </div>
+    </Field>
+  )
+}
+
+const BUILTIN_TOOLS: { value: string; label: string }[] = [
+  { value: 'book_meeting', label: 'book_meeting — Google Calendar' },
+  { value: 'transfer_call', label: 'transfer_call — handoff to PSTN' },
+  { value: 'end_call', label: 'end_call — hang up' },
+  { value: 'send_dtmf', label: 'send_dtmf — IVR digits' },
+  { value: 'kb_lookup', label: 'kb_lookup — search KB' },
+  { value: 'extract_data', label: 'extract_data — persist slots' },
+  { value: 'leave_voicemail', label: 'leave_voicemail' },
+]
+
+function ToolCallEditor({
+  data,
+  onPatch,
+}: {
+  data: StepData
+  onPatch: (p: Partial<StepData>) => void
+}) {
+  const argMap = data.arg_map ?? {}
+  const argEntries = Object.entries(argMap)
+
+  const patchArg = (param: string, slot: string) =>
+    onPatch({ arg_map: { ...argMap, [param]: slot } })
+  const removeArg = (param: string) => {
+    const next = { ...argMap }
+    delete next[param]
+    onPatch({ arg_map: next })
+  }
+  const addArg = () => {
+    const blank = `arg_${argEntries.length}`
+    onPatch({ arg_map: { ...argMap, [blank]: '' } })
+  }
+
+  return (
+    <div className="space-y-3">
+      <Field label="Tool" hint="Builtin or tool_xxx DB ref">
+        <input
+          data-testid="tool-ref-input"
+          className={cn(inputCls, 'font-mono')}
+          value={data.tool ?? ''}
+          onChange={(e) => onPatch({ tool: e.target.value })}
+          list="tool-suggestions"
+          placeholder="book_meeting"
+        />
+        <datalist id="tool-suggestions">
+          {BUILTIN_TOOLS.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
+            </option>
+          ))}
+        </datalist>
+      </Field>
+
+      <Field
+        label="Arg → slot mapping"
+        hint="Empty = 1:1 from var bag"
+      >
+        <div className="space-y-1.5">
+          {argEntries.map(([param, slot]) => (
+            <div key={param} className="flex gap-2">
+              <input
+                data-testid={`argmap-param-${param}`}
+                className={cn(inputCls, 'flex-1 font-mono')}
+                value={param}
+                onChange={(e) => {
+                  const next = { ...argMap }
+                  delete next[param]
+                  next[e.target.value] = slot
+                  onPatch({ arg_map: next })
+                }}
+                placeholder="tool_param"
+              />
+              <span className="self-center text-[11px] text-muted">←</span>
+              <input
+                data-testid={`argmap-slot-${param}`}
+                className={cn(inputCls, 'flex-1 font-mono')}
+                value={slot}
+                onChange={(e) => patchArg(param, e.target.value)}
+                placeholder="slot_name"
+              />
+              <button
+                type="button"
+                title="Remove"
+                onClick={() => removeArg(param)}
+                className="grid h-7 w-7 place-items-center rounded-[8px] border border-border bg-panel-2 text-muted hover:text-red-400"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            data-testid="argmap-add"
+            onClick={addArg}
+            className="w-full rounded-[8px] border border-dashed border-border px-2 py-1.5 text-[11px] text-muted hover:border-accent hover:text-fg"
+          >
+            + add mapping
+          </button>
+        </div>
+      </Field>
+
+      <Field label="Confirm before fire" hint="Read back values + wait for yes">
+        <label className="flex items-center gap-2 text-[12px] text-fg">
+          <input
+            type="checkbox"
+            data-testid="confirm-before-fire"
+            checked={!!data.confirm_before_fire}
+            onChange={(e) => onPatch({ confirm_before_fire: e.target.checked })}
+          />
+          require explicit confirmation
+        </label>
+      </Field>
+
+      <Field label="Pre-message" hint="Spoken before tool fires">
+        <input
+          data-testid="pre-message"
+          className={inputCls}
+          value={data.pre_message ?? ''}
+          onChange={(e) => onPatch({ pre_message: e.target.value })}
+          placeholder="Let me check that for you…"
+        />
+      </Field>
+
+      <Field label="Success message" hint="Spoken on tool success">
+        <input
+          data-testid="success-message"
+          className={inputCls}
+          value={data.success_message ?? ''}
+          onChange={(e) => onPatch({ success_message: e.target.value })}
+          placeholder="All booked! You'll get a calendar invite."
+        />
+      </Field>
+
+      <Field label="Error message" hint="Spoken on tool error; routes via 'error' edge">
+        <input
+          data-testid="error-message"
+          className={inputCls}
+          value={data.error_message ?? ''}
+          onChange={(e) => onPatch({ error_message: e.target.value })}
+          placeholder="I'm having trouble booking right now."
+        />
+      </Field>
+    </div>
   )
 }

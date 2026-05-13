@@ -10,7 +10,7 @@ class AgentVersionIn(BaseModel):
     first_message: str | None = None
     system_prompt: str | None = None
     model_id: str = "gemini/gemini-3.1-flash-lite"
-    voice_id: str = "21m00Tcm4TlvDq8ikWAM"
+    voice_id: str = "EXAVITQu4vr4xnSDxMaL"
     stt_id: str = "deepgram-nova-3"
     language: str = "en"
     interruption_sensitivity: float = Field(0.5, ge=0.0, le=1.0)

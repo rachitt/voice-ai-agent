@@ -15,6 +15,8 @@ from typing import Any, Literal
 StepKind = Literal[
     "greeting",
     "collect",
+    "slot_fill",
+    "tool_call",
     "api",
     "condition",
     "transfer",
@@ -34,9 +36,17 @@ class KindRule:
     root: bool = False
 
 
+# `tool_call` and `slot_fill` can use natural-language transition labels on
+# their outbound edges; we declare a generous out_max so authors can fan out
+# into N branches the NL classifier will resolve at runtime. `allowed_labels`
+# stays empty so any user-defined branch label is accepted.
 RULES: dict[str, KindRule] = {
     "greeting": KindRule(in_allowed=False, out_max=1, root=True),
-    "collect": KindRule(in_allowed=True, out_max=1),
+    "collect": KindRule(in_allowed=True, out_max=8),
+    "slot_fill": KindRule(in_allowed=True, out_max=1),
+    "tool_call": KindRule(
+        in_allowed=True, out_max=2, out_needs_label=True, allowed_labels=("success", "error")
+    ),
     "api": KindRule(in_allowed=True, out_max=1),
     "condition": KindRule(
         in_allowed=True, out_max=2, out_needs_label=True, allowed_labels=("yes", "no")

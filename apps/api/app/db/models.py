@@ -101,7 +101,7 @@ class AgentVersion(Base, TimestampMixin):
     first_message: Mapped[str | None] = mapped_column(Text)
     system_prompt: Mapped[str | None] = mapped_column(Text)
     model_id: Mapped[str] = mapped_column(String(80), default="gemini/gemini-3.1-flash-lite", nullable=False)
-    voice_id: Mapped[str] = mapped_column(String(80), default="21m00Tcm4TlvDq8ikWAM", nullable=False)
+    voice_id: Mapped[str] = mapped_column(String(80), default="EXAVITQu4vr4xnSDxMaL", nullable=False)
     stt_id: Mapped[str] = mapped_column(String(80), default="deepgram-nova-3", nullable=False)
     language: Mapped[str] = mapped_column(String(16), default="en", nullable=False)
 

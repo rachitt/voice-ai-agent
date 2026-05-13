@@ -105,9 +105,12 @@ _MODELS = [
 # Static fallback used when no live ElevenLabs key is configured.
 # IDs are public ElevenLabs voice IDs (NOT TTS model ids).
 _VOICES = [
-    {"id": "21m00Tcm4TlvDq8ikWAM", "label": "Rachel", "vendor": "elevenlabs", "latency": "fast"},
+    # Premade voices — accessible on free tier. Library voices (e.g. Rachel
+    # 21m00Tcm4TlvDq8ikWAM) require a paid plan and 402 on free accounts.
+    {"id": "EXAVITQu4vr4xnSDxMaL", "label": "Sarah", "vendor": "elevenlabs", "latency": "fast"},
     {"id": "pNInz6obpgDQGcFmaJgB", "label": "Adam", "vendor": "elevenlabs", "latency": "fast"},
-    {"id": "EXAVITQu4vr4xnSDxMaL", "label": "Bella", "vendor": "elevenlabs", "latency": "fast"},
+    {"id": "hpp4J3VqNfWAUOO0d1Us", "label": "Bella", "vendor": "elevenlabs", "latency": "fast"},
+    {"id": "JBFqnCBsd6RMkjVDRZzb", "label": "George", "vendor": "elevenlabs", "latency": "fast"},
 ]
 
 

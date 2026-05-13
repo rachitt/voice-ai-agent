@@ -2,31 +2,30 @@
 
 ## Last session
 
-Shipped 6-item queue from prior session: custom tool round-trip test
-suite (`test_custom_tool_roundtrip.py`) + httpbin smoke script; Google
-Calendar `book_meeting` builtin via service-account JWT auth +
-`_dispatch_http_tool` parity on web/Telnyx paths; double-submit-cookie
-CSRF middleware (mints `voice_csrf` alongside session, web client copies
-to `X-CSRF-Token` on writes, Bearer/webhook/login exempt); split
-`session_secret` from `webhook_hmac_secret` w/ backwards-compat fallback;
-per-call TTS cache stats (`hits/misses/miss_chars` on Pipeline, persisted
-to `call.dynamic_variables["tts_cache"]`); fixed real bug where
-`TtsProviderError` cached partial waveform; coverage 93→95.06%, gate bumped
-to 95. 470/470 pytest, 29/29 vitest, web build clean.
+Closed Retell/Vapi feature parity gap. Added `slot_fill` (loop until
+required slots filled, auto-binds `extract_data`), `tool_call` (fires
+bound tool with arg_map, optional confirm read-back, lifecycle messages
+pre/success/error, success/error edges), per-node tool overrides (mutate
+`cfg.tools` on enter), and Retell-style N-way NL transition classifier
+on outbound edges via `data.condition`. Frontend: palette + types +
+NodeInspector forms (slot editor + tool picker + lifecycle msg fields).
+Fixed ElevenLabs free-tier voice issue (Rachel→Sarah). Coverage held at
+95.08% (gate still green). 495 pytest, 29 vitest, web build clean.
 
 ## For next session
 
-1. **Live calendar smoke**: provision a real SA against a test calendar,
-   run `book_meeting` via the test-call modal, confirm an event lands.
-2. **CSRF in OAuth flow**: the dashboard reads `voice_csrf` cookie via
-   JS today; verify it survives a real Google OAuth round-trip in the
-   browser (cookie is set on the 302 from `/callback/google`).
-3. **TTS-cache stats dashboard**: surface per-org rollups in the console
-   UI — `sum(miss_chars) * elevenlabs_rate_per_char = $saved`.
-4. **Mypy + ruff cleanup**: 56 pre-existing mypy errors, 37 ruff. Decide
-   whether to bite the bullet and gate either, or keep them advisory.
-5. **Async KB ingest worker**: the path is now covered by tests but the
-   worker queue itself is still bare-bones — add retry/backoff for
-   transient embedding-provider failures.
-6. **Custom-tool UI polish**: builder still lacks a "test this tool"
-   button that fires the HTTP request out-of-band before binding.
+1. **End-to-end booking flow demo**: build the canonical agent in the
+   UI (greeting → slot_fill[email, time] → tool_call[book_meeting]
+   → end) and run it on a real call to prove the framework holds.
+2. **Edge label UI**: the connection-rules dialog still asks "yes/no";
+   extend it to ask for NL `condition` text on collect/slot_fill outbound
+   edges. Without UI authors can't write NL conditions.
+3. **Slot validators**: today slots accept any string. Wire the
+   `type` field (email/phone/iso_datetime) to a server-side validator
+   so `extract_data` can reject malformed values and ask again.
+4. **Per-node tools picker**: builder currently doesn't surface the
+   `tools` array on collect/slot_fill nodes. Add a multi-select against
+   `/v1/tools` + builtins.
+5. **Confirm-message templates**: auto-build read-back string from
+   slot values; expose a "tone" preset (casual/formal/concise).
+6. **Squad / multi-agent handoff**: Vapi's other big feature. Long tail.

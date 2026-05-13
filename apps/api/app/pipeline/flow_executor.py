@@ -17,7 +17,9 @@ and advances the graph after every conversational turn.
 
 V1 node-kind coverage:
   greeting   — speak prompt, advance
-  collect    — push per-step prompt, wait for user turn
+  collect    — push per-step prompt, wait for user turn (NL-classified next)
+  slot_fill  — gather required slots one at a time, advance when complete
+  tool_call  — fire bound tool with mapped args; branch success/error
   kb_lookup  — inline KB search, inject hits as system note, advance
   condition  — LLM yes/no classifier on recent transcript, branch
   end        — close pipeline
@@ -27,6 +29,15 @@ V1 node-kind coverage:
 
 Anything beyond the V1 surface (e.g. unknown kinds) falls through to the
 next outbound edge with a warning, mirroring the validator's policy.
+
+Per-node tools: a node can carry `data.tools` (list of tool names). When that
+node is active, the Pipeline's LLM-visible tool set is replaced with the
+node's subset (deduped against the global agent tools). On exit, the global
+set is restored. This matches Retell's per-state tool binding pattern.
+
+Edge transitions: edges may carry `data.condition` (natural-language). When
+a non-condition node has > 1 outbound edge with conditions, the executor
+runs an N-way classifier after the user turn and routes accordingly.
 """
 
 from __future__ import annotations
@@ -96,8 +107,11 @@ class FlowExecutor:
             if isinstance(nid, str) and isinstance(kind, str):
                 self._nodes[nid] = _NodeView(id=nid, kind=kind, data=data)
 
-        # source_id → list[(target_id, label_lower)]
-        self._edges: dict[str, list[tuple[str, str | None]]] = {}
+        # source_id → list[(target_id, label_lower, condition_text)]
+        # `label` keeps backwards-compat with yes/no condition routing;
+        # `condition` carries NL transition text (Retell-style) for N-way
+        # routing on collect / slot_fill / tool_call outbound edges.
+        self._edges: dict[str, list[tuple[str, str | None, str | None]]] = {}
         for e in edges_raw:
             if not isinstance(e, dict):
                 continue
@@ -106,7 +120,18 @@ class FlowExecutor:
                 continue
             label = e.get("label")
             label = label.lower() if isinstance(label, str) else None
-            self._edges.setdefault(src, []).append((tgt, label))
+            data = e.get("data") if isinstance(e.get("data"), dict) else {}
+            condition = (data.get("condition") or "").strip() or None
+            self._edges.setdefault(src, []).append((tgt, label, condition))
+
+        # Stash the agent's full tool set so per-node `tools` overrides
+        # can be unwound on exit. `cfg.tools` itself is mutated each node
+        # entry so the next LLM turn sees the right subset.
+        self._base_tools: list[dict] = list(cfg.tools or [])
+        # tool_call nodes set this flag at enter-time when they want a
+        # confirmation turn before firing. The next user turn's confirm
+        # classifier reads + clears this.
+        self._pending_confirm: dict[str, bool] = {}
 
     # --- variable interpolation --------------------------------------------
 
@@ -181,7 +206,7 @@ class FlowExecutor:
     def _next(self, nid: str, *, label: str | None = None) -> str | None:
         outs = self._edges.get(nid) or []
         if label is not None:
-            for tgt, lab in outs:
+            for tgt, lab, _cond in outs:
                 if lab == label.lower():
                     return tgt
             # No exact label match — fall through to first outbound.
@@ -197,7 +222,30 @@ class FlowExecutor:
         if nv is None:
             return
         if nv.kind == "collect":
+            await self._advance_with_nl(cur)
+            return
+        if nv.kind == "slot_fill":
+            # Loop in-place until every required slot is in the var bag.
+            missing = self._missing_slots(nv)
+            if missing:
+                self._inject_slot_prompt(nv, missing)
+                return
             await self._enter_after(cur)
+            return
+        if nv.kind == "tool_call":
+            # Confirm-before-fire path waits for a user "yes" turn.
+            if self._pending_confirm.get(cur):
+                approved = await self._classify_confirm()
+                self._pending_confirm.pop(cur, None)
+                if approved:
+                    await self._do_tool_call(nv)
+                else:
+                    # User said no — go back upstream slot_fill if any,
+                    # else stay in this node and reprompt.
+                    self.pipe.set_step_prompt(
+                        self._render(nv.data.get("retry_prompt"))
+                        or "Which detail should we change?"
+                    )
 
     async def _enter_after(self, from_id: str) -> None:
         nxt = self._next(from_id)
@@ -245,9 +293,31 @@ class FlowExecutor:
             await self._enter_after(nid)
             return
         if nv.kind == "collect":
+            self._apply_node_tools(nv)
             prompt = isinstance(nv.data.get("prompt"), str) and nv.data["prompt"].strip()
             self.pipe.set_step_prompt(self._render(prompt) or None)
             return  # wait for user turn → _on_turn_end advances
+        if nv.kind == "slot_fill":
+            self._apply_node_tools(nv, ensure=("extract_data",))
+            missing = self._missing_slots(nv)
+            if not missing:
+                # Already satisfied (came in with vars populated upstream).
+                await self._enter_after(nid)
+                return
+            self._inject_slot_prompt(nv, missing)
+            return  # wait for next user turn
+        if nv.kind == "tool_call":
+            self._apply_node_tools(nv)
+            if nv.data.get("confirm_before_fire"):
+                self._pending_confirm[nid] = True
+                await self._speak(self._confirm_text(nv))
+                self.pipe.set_step_prompt(
+                    "Wait for user confirmation. If they agree (yes / confirm / book it),"
+                    " the next turn fires the tool. Otherwise ask which detail to change."
+                )
+                return
+            await self._do_tool_call(nv)
+            return
         if nv.kind == "condition":
             # Condition classifies the just-completed turn synchronously, then
             # routes by yes/no label. We don't wait for another user turn —
@@ -343,6 +413,271 @@ class FlowExecutor:
             await self._transfer(to=to, summary=summary)
         except Exception as exc:
             log.warning("flow.transfer.err", to=to, err=str(exc))
+
+    # --- slot fill ----------------------------------------------------------
+
+    def _slot_specs(self, nv: _NodeView) -> list[dict[str, Any]]:
+        """Normalised list of slot specs from node data.
+
+        Each spec is `{name, prompt, required, type, retry_prompt}`. Missing
+        fields default to sensible values so authors can write `[{"name":"x"}]`.
+        """
+        raw = nv.data.get("slots")
+        if not isinstance(raw, list):
+            return []
+        out: list[dict[str, Any]] = []
+        for s in raw:
+            if not isinstance(s, dict):
+                continue
+            name = (s.get("name") or "").strip()
+            if not name:
+                continue
+            out.append(
+                {
+                    "name": name,
+                    "prompt": (s.get("prompt") or "").strip(),
+                    "required": bool(s.get("required", True)),
+                    "type": (s.get("type") or "string").strip(),
+                    "retry_prompt": (s.get("retry_prompt") or "").strip(),
+                }
+            )
+        return out
+
+    def _missing_slots(self, nv: _NodeView) -> list[dict[str, Any]]:
+        return [s for s in self._slot_specs(nv) if s["required"] and not self._vars.get(s["name"])]
+
+    def _inject_slot_prompt(self, nv: _NodeView, missing: list[dict[str, Any]]) -> None:
+        # One-shot system note: tell the LLM what to ask + that it should call
+        # extract_data with whatever it learns. The LLM stays in-node until
+        # every required slot is on the var bag.
+        wanted = "; ".join(f"{s['name']} ({s['prompt'] or s['type']})" for s in missing)
+        intent = (self._render(nv.data.get("prompt")) or "").strip()
+        instructions = (
+            (intent + "\n" if intent else "")
+            + f"Still need: {wanted}. Ask for ONE of these next. "
+            "When the user supplies a value, IMMEDIATELY call the extract_data tool "
+            "with a JSON object mapping the slot name to the value (e.g. "
+            '{"data": {"attendee_email": "alice@example.com"}}). '
+            "Do not claim you've recorded anything without calling the tool."
+        )
+        self.pipe.set_step_prompt(instructions)
+
+    # --- tool dispatch ------------------------------------------------------
+
+    def _confirm_text(self, nv: _NodeView) -> str:
+        tmpl = (nv.data.get("confirm_message") or "").strip()
+        if tmpl:
+            return self._render(tmpl)
+        # Auto-build "About to call X with Y=…, Z=…. Confirm?" read-back.
+        args = self._tool_args_from_slots(nv)
+        readback = ", ".join(f"{k}={v}" for k, v in args.items() if v is not None)
+        tool_name = nv.data.get("tool") or "this action"
+        return f"Just to confirm — I'll {tool_name} with {readback}. Sound right?"
+
+    def _tool_args_from_slots(self, nv: _NodeView) -> dict[str, Any]:
+        """Build the tool args dict from `arg_map` + var bag.
+
+        `arg_map` is `{tool_param: slot_name}`. Missing entries fall back to
+        a 1:1 match against `_vars`.
+        """
+        arg_map = nv.data.get("arg_map") if isinstance(nv.data.get("arg_map"), dict) else {}
+        out: dict[str, Any] = {}
+        for param, slot in arg_map.items():
+            val = self._lookup_var(slot if isinstance(slot, str) else param)
+            if val is not None:
+                out[param] = val
+        # If no explicit map, copy all matching keys from the var bag.
+        if not out:
+            for k, v in self._vars.items():
+                if v is not None and isinstance(k, str):
+                    out[k] = v
+        return out
+
+    async def _classify_confirm(self) -> bool:
+        """Tiny LLM call: did the user just agree to fire the tool?"""
+        recent = [
+            {"role": m.get("role"), "content": m.get("content")}
+            for m in self.pipe._messages[-4:]  # type: ignore[attr-defined]
+            if m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str)
+        ]
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Classify the user's last reply. Did they explicitly confirm / agree "
+                    "to proceed with the proposed action? Reply with exactly one token: "
+                    "yes or no."
+                ),
+            },
+            *recent,
+        ]
+        text = ""
+        try:
+            async for ev in self.pipe._llm(  # type: ignore[attr-defined]
+                messages=messages, tools=None
+            ):
+                if isinstance(ev, TextChunk):
+                    text += ev.text
+                elif isinstance(ev, TurnComplete):
+                    break
+        except Exception as exc:
+            log.warning("flow.confirm.err", err=str(exc))
+            return False
+        return text.strip().lower().startswith("yes")
+
+    async def _do_tool_call(self, nv: _NodeView) -> None:
+        tool_name = nv.data.get("tool")
+        if not isinstance(tool_name, str) or not tool_name:
+            log.warning("flow.tool.missing_ref", node=nv.id)
+            await self._enter_after(nv.id)
+            return
+
+        # Lifecycle: pre-message → fire → success/error message → route.
+        pre = self._render(nv.data.get("pre_message"))
+        if pre:
+            await self._speak(pre)
+
+        args = self._tool_args_from_slots(nv)
+        log.info("flow.tool.fire", node=nv.id, tool=tool_name, args=args)
+        result: dict[str, Any]
+        if self.pipe._dispatch is None:  # type: ignore[attr-defined]
+            result = {"error": "no_tool_dispatch"}
+        else:
+            try:
+                result = await self.pipe._dispatch(  # type: ignore[attr-defined]
+                    ToolCall(id=f"flow_{nv.id}", name=tool_name, arguments=args)
+                )
+            except Exception as exc:
+                log.exception("flow.tool.err", node=nv.id, err=str(exc))
+                result = {"error": "tool_failed", "detail": str(exc)}
+
+        is_error = isinstance(result, dict) and "error" in result
+        # Stash the result under the node id so downstream `{{node_id.key}}`
+        # placeholders can quote it. Also under the tool name for ergonomics.
+        self._vars[nv.id] = result
+        self._vars[tool_name] = result
+        self.pipe.emit_event(
+            "tool_result",
+            text=tool_name,
+            data={"id": f"flow_{nv.id}", "result": result},
+        )
+
+        msg = self._render(
+            nv.data.get("error_message" if is_error else "success_message")
+        )
+        if msg:
+            await self._speak(msg)
+
+        # Route via outbound label.
+        nxt = self._next(nv.id, label="error" if is_error else "success")
+        if nxt is None:
+            # No labelled branch — fall through to first outbound, or terminate.
+            nxt = self._next(nv.id)
+        if nxt:
+            await self._enter(nxt)
+        else:
+            await self._terminate()
+
+    # --- per-node tools -----------------------------------------------------
+
+    def _apply_node_tools(self, nv: _NodeView, *, ensure: tuple[str, ...] = ()) -> None:
+        """Set Pipeline's visible tool list for this node's lifetime.
+
+        Semantics:
+          * If node declares `data.tools = [...]`, intersect the base agent
+            tools by name + tack on anything in `ensure`.
+          * If no override, start from the full base set, then still tack on
+            `ensure` so callers (e.g. slot_fill) can guarantee a builtin is
+            visible to the LLM regardless of agent-level config.
+        """
+        from app.tools.builtins import REGISTRY
+
+        overrides = nv.data.get("tools")
+        wanted: set[str] | None
+        if isinstance(overrides, list):
+            wanted = {t for t in overrides if isinstance(t, str)} | set(ensure)
+        else:
+            wanted = None  # accept all base tools, plus `ensure`
+
+        kept: list[dict] = []
+        seen: set[str] = set()
+        for t in self._base_tools:
+            fn = t.get("function") if isinstance(t, dict) else None
+            name = fn.get("name") if isinstance(fn, dict) else None
+            if not isinstance(name, str) or name in seen:
+                continue
+            if wanted is None or name in wanted:
+                kept.append(t)
+                seen.add(name)
+        # Pull in any tool listed in `ensure` that isn't already on the agent
+        # (e.g. extract_data on a slot_fill node when the agent didn't bind it).
+        for name in ensure:
+            if name in seen:
+                continue
+            entry = REGISTRY.get(name)
+            if entry:
+                kept.append(entry["definition"])
+                seen.add(name)
+        self.cfg.tools = kept
+
+    # --- NL transition routing (Retell-style) ------------------------------
+
+    async def _advance_with_nl(self, from_id: str) -> None:
+        """Pick the outbound edge whose `condition` best matches the latest turn.
+
+        Falls back to single-outbound behaviour when only one edge exists.
+        """
+        outs = self._edges.get(from_id) or []
+        if not outs:
+            return
+        if len(outs) == 1:
+            await self._enter(outs[0][0])
+            return
+        conditioned = [(tgt, cond) for tgt, _lab, cond in outs if cond]
+        if not conditioned:
+            # No conditions authored — first outbound wins for compat.
+            await self._enter(outs[0][0])
+            return
+        chosen = await self._classify_nl(conditioned)
+        await self._enter(chosen or outs[0][0])
+
+    async def _classify_nl(self, branches: list[tuple[str, str]]) -> str | None:
+        """N-way classifier: pick the branch whose condition matches the
+        recent conversation. Returns target node id, or None on parse failure.
+        """
+        if not branches:
+            return None
+        lines = [f"{i + 1}. {cond}" for i, (_tgt, cond) in enumerate(branches)]
+        recent = [
+            {"role": m.get("role"), "content": m.get("content")}
+            for m in self.pipe._messages[-6:]  # type: ignore[attr-defined]
+            if m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str)
+        ]
+        prompt = (
+            "Classify the conversation into ONE of the following branches.\n"
+            + "\n".join(lines)
+            + "\nReply with the number only."
+        )
+        messages = [{"role": "system", "content": prompt}, *recent]
+        text = ""
+        try:
+            async for ev in self.pipe._llm(  # type: ignore[attr-defined]
+                messages=messages, tools=None
+            ):
+                if isinstance(ev, TextChunk):
+                    text += ev.text
+                elif isinstance(ev, TurnComplete):
+                    break
+        except Exception as exc:
+            log.warning("flow.classify_nl.err", err=str(exc))
+            return None
+        m = re.search(r"\d+", text)
+        if not m:
+            return None
+        idx = int(m.group(0)) - 1
+        if 0 <= idx < len(branches):
+            return branches[idx][0]
+        return None
 
     # --- condition classifier ----------------------------------------------
 

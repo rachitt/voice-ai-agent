@@ -42,7 +42,9 @@ def test_constructor_skips_non_dict_nodes_and_edges():
     )
     assert "ok" in fe._nodes
     assert "no-kind" not in fe._nodes
-    assert fe._edges.get("ok") == [("ok", None)]
+    # Edge tuples are now (target, label, condition) to support Retell-style
+    # NL transitions on outbound edges.
+    assert fe._edges.get("ok") == [("ok", None, None)]
 
 
 def test_render_empty_text_returns_empty():

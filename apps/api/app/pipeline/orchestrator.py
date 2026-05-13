@@ -32,7 +32,7 @@ from app.pipeline import llm as llm_mod
 @dataclass
 class AgentConfig:
     model_id: str = "gemini/gemini-3.1-flash-lite"
-    voice_id: str = "21m00Tcm4TlvDq8ikWAM"
+    voice_id: str = "EXAVITQu4vr4xnSDxMaL"
     system_prompt: str = ""
     first_message: str | None = None
     tools: list[dict] = field(default_factory=list)  # OpenAI tool schemas

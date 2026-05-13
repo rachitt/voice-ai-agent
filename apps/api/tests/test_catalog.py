@@ -61,5 +61,6 @@ async def test_voices_falls_back_when_live_fails(client, auth_headers, monkeypat
     r = await client.get("/v1/voices", headers=auth_headers)
     assert r.status_code == 200
     items = r.json()["items"]
-    # Static fallback present
-    assert any(v["id"] == "21m00Tcm4TlvDq8ikWAM" for v in items)
+    # Static fallback present (Sarah is the free-tier default; Rachel was
+    # dropped because it's a library voice and 402s on free accounts).
+    assert any(v["id"] == "EXAVITQu4vr4xnSDxMaL" for v in items)
