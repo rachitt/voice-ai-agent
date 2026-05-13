@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Headphones } from 'lucide-react'
-import { api, getApiBase, getApiKey } from '@/lib/api'
+import { api, getApiBase } from '@/lib/api'
 import { SEED_TRANSCRIPT, type TranscriptLine } from './fixtures'
 import { cn } from '@/lib/cn'
 
@@ -22,12 +22,6 @@ export function LiveTranscript() {
     setLive(false)
     setErr(null)
     if (!callId) return
-
-    const key = getApiKey()
-    if (!key) {
-      setErr('Set API key on the Web Call page first.')
-      return
-    }
 
     let cancelled = false
     let counter = 0

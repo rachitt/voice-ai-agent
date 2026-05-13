@@ -59,9 +59,7 @@ class TelnyxClient:
         if stream_url:
             body["stream_url"] = stream_url
             body["stream_track"] = stream_track
-        r = await self._client.post(
-            f"/calls/{call_control_id}/actions/answer", json=body
-        )
+        r = await self._client.post(f"/calls/{call_control_id}/actions/answer", json=body)
         r.raise_for_status()
         return r.json()
 

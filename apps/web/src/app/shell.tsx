@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Navigate, NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   Rocket,
   BarChart3,
@@ -30,8 +30,24 @@ const NAV: NavItem[] = [
 ]
 
 export function Shell() {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
+  const { signedIn, loading } = useAuth()
   const active = NAV.find((n) => (n.to === '/' ? pathname === '/' : pathname.startsWith(n.to)))
+
+  // Gate every shell route on a valid session cookie. The /signin page lives
+  // outside Shell so it can't loop. The me() probe is cookie-only, so this is
+  // resilient even when the API key in localStorage is gone (it always is now).
+  if (loading) {
+    return (
+      <div className="grid h-screen w-screen place-items-center bg-bg text-xs text-muted">
+        Checking session…
+      </div>
+    )
+  }
+  if (!signedIn) {
+    const next = encodeURIComponent(pathname + search)
+    return <Navigate to={`/signin?next=${next}`} replace />
+  }
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-bg text-fg">

@@ -35,6 +35,7 @@ class CallOut(BaseModel):
 
 class WebCallCreated(CallOut):
     """Web-call create response includes a short-lived WS session token."""
+
     ws_token: str
     ws_url: str
 
@@ -68,6 +69,7 @@ class CallListPage(BaseModel):
 
 class CallDetailOut(CallOut):
     """Full detail including transcript + provider IDs for the review page."""
+
     transcript: list[dict] | None = None
     provider_call_id: str | None = None
     phone_number_id: str | None = None

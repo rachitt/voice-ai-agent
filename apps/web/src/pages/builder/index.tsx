@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { api, latestVersion } from '@/lib/api'
 import { BuilderTopbar } from './BuilderTopbar'
 import { StepPalette } from './StepPalette'
@@ -10,6 +10,7 @@ import { useBuilder } from './store'
 
 export function BuilderPage() {
   const { agentId = 'demo' } = useParams()
+  const navigate = useNavigate()
   const hydrateFromAgent = useBuilder((s) => s.hydrateFromAgent)
   const setSaveStatus = useBuilder((s) => s.setSaveStatus)
 
@@ -18,8 +19,40 @@ export function BuilderPage() {
     ;(window as unknown as { __voiceBuilder?: typeof useBuilder }).__voiceBuilder = useBuilder
   }, [])
 
+  // /builder/demo used to be an offline-only seed graph. That meant Test Call
+  // and Publish were permanently disabled on that URL (no `agentMeta`).
+  // Resolve it to a real backing agent instead — reuse the first one in the
+  // org, or mint a freshly-named "Demo Agent" if none exists. Then bounce
+  // the URL so the rest of the builder hydrates as normal.
   useEffect(() => {
-    if (agentId === 'demo') return // offline seed graph
+    if (agentId !== 'demo') return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const list = await api.listAgents()
+        if (cancelled) return
+        if (list.length > 0) {
+          navigate(`/builder/${list[0].id}`, { replace: true })
+          return
+        }
+        const detail = await api.createAgent({
+          name: 'Demo Agent',
+          first_message: 'Hi! How can I help today?',
+          system_prompt: 'You are a helpful voice agent. Reply briefly.',
+        })
+        if (cancelled) return
+        navigate(`/builder/${detail.id}`, { replace: true })
+      } catch (e) {
+        if (!cancelled) setSaveStatus('error', String(e))
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [agentId, navigate, setSaveStatus])
+
+  useEffect(() => {
+    if (agentId === 'demo') return // handled by the resolver above
     let cancelled = false
     setSaveStatus('saving') // visually 'loading' until hydrate completes
     api

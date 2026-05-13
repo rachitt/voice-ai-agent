@@ -10,6 +10,7 @@ from app.routers import (
     api_keys,
     auth_oauth,
     calls,
+    catalog,
     console,
     knowledge_bases,
     phone_numbers,
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_oauth.router)
     app.include_router(api_keys.router)
     app.include_router(console.router)
+    app.include_router(catalog.router)
 
     return app
 

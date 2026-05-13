@@ -5,6 +5,7 @@ Mirrors apps/web/src/pages/builder/connection-rules.ts. Keep in sync.
 Used at publish-time to reject malformed agent flow graphs. Drafts via PATCH
 are NOT validated here — only when /publish runs.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -140,9 +141,7 @@ def validate_flow_graph(graph: dict[str, Any] | None) -> FlowValidation:
         kind = nodes_by_id[src]["kind"]
         rule = RULES[kind]
         if len(outs) > rule.out_max:
-            res.errors.append(
-                f"{src} ({kind}) has {len(outs)} outbound edges (max {rule.out_max})"
-            )
+            res.errors.append(f"{src} ({kind}) has {len(outs)} outbound edges (max {rule.out_max})")
         if rule.out_needs_label:
             labels: list[str] = []
             for o in outs:

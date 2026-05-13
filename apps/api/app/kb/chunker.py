@@ -1,4 +1,5 @@
 """Simple recursive-character chunker. Sentence-aware where possible."""
+
 from __future__ import annotations
 
 import re
@@ -14,9 +15,7 @@ class Chunk:
     text: str
 
 
-def chunk_text(
-    text: str, *, target_chars: int = 1200, overlap_chars: int = 200
-) -> list[Chunk]:
+def chunk_text(text: str, *, target_chars: int = 1200, overlap_chars: int = 200) -> list[Chunk]:
     """Split text into roughly target_chars chunks with overlap.
 
     Strategy: split on paragraphs first; within each paragraph, on sentences;

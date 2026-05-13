@@ -83,7 +83,13 @@ export function BuilderTopbar({ agentId }: { agentId: string }) {
           data-testid="test-call"
           onClick={() => agentMeta && setTestCallOpen(true)}
           disabled={!agentMeta}
-          title={agentMeta ? 'Open a live test call' : 'Save the agent first'}
+          title={
+            agentMeta
+              ? 'Open a live test call'
+              : agentId === 'demo'
+                ? 'Demo agent is offline-only — open a real agent from the console to test'
+                : 'Loading agent…'
+          }
           className={cn(
             'inline-flex items-center gap-1.5 rounded-[8px] border border-border bg-panel-2 px-3 py-1.5 text-xs text-muted hover:text-fg',
             !agentMeta && 'opacity-60 cursor-not-allowed',

@@ -4,6 +4,7 @@ Separate from API-key bearer auth. JWT payload:
     {"sub": user_id, "org": org_id, "exp": unix_ts}
 Signed with session_secret (HS256). Stored in an HttpOnly, SameSite=Lax cookie.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta

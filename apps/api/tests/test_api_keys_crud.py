@@ -1,4 +1,5 @@
 """Dashboard API key management (session-cookie auth)."""
+
 from __future__ import annotations
 
 import pytest
@@ -13,9 +14,7 @@ async def session_user(db_session):
     org = models.Org(name="KeyOrg", slug="key-org")
     db_session.add(org)
     await db_session.flush()
-    user = models.User(
-        org_id=org.id, email="dash@example.com", name="Dashy", google_sub="g-key"
-    )
+    user = models.User(org_id=org.id, email="dash@example.com", name="Dashy", google_sub="g-key")
     db_session.add(user)
     await db_session.commit()
     token = mint_session(user.id, org.id)
@@ -39,9 +38,7 @@ async def test_create_returns_raw_key_once(client, session_user):
 
 @pytest.mark.asyncio
 async def test_list_does_not_leak_key(client, session_user):
-    await client.post(
-        "/v1/api-keys", json={"name": "k1"}, cookies=session_user["cookie"]
-    )
+    await client.post("/v1/api-keys", json={"name": "k1"}, cookies=session_user["cookie"])
     r = await client.get("/v1/api-keys", cookies=session_user["cookie"])
     assert r.status_code == 200
     rows = r.json()

@@ -9,8 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field
 class AgentVersionIn(BaseModel):
     first_message: str | None = None
     system_prompt: str | None = None
-    model_id: str = "gemini-2.0-flash"
-    voice_id: str = "eleven_flash_v2_5"
+    model_id: str = "gemini/gemini-3.1-flash-lite"
+    voice_id: str = "21m00Tcm4TlvDq8ikWAM"
     stt_id: str = "deepgram-nova-3"
     language: str = "en"
     interruption_sensitivity: float = Field(0.5, ge=0.0, le=1.0)
@@ -19,6 +19,7 @@ class AgentVersionIn(BaseModel):
     tools: list[str] = Field(default_factory=list)
     knowledge_base_ids: list[str] = Field(default_factory=list)
     analysis_plan: dict[str, Any] | None = None
+    dynamic_variables: dict[str, Any] = Field(default_factory=dict)
     server_url: str | None = None
 
 

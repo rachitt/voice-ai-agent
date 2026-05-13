@@ -1,4 +1,5 @@
 """Google OAuth flow: login redirect, callback (with mocked Google), me, logout."""
+
 from __future__ import annotations
 
 import pytest
@@ -72,12 +73,15 @@ async def test_callback_happy_path_creates_user_and_sets_cookie(client, monkeypa
 
         async def get(self, url, headers=None, **kw):
             assert "userinfo" in url
-            return _Resp(200, {
-                "sub": "g-12345",
-                "email": "user@example.com",
-                "name": "Test User",
-                "picture": "https://lh3.googleusercontent.com/x",
-            })
+            return _Resp(
+                200,
+                {
+                    "sub": "g-12345",
+                    "email": "user@example.com",
+                    "name": "Test User",
+                    "picture": "https://lh3.googleusercontent.com/x",
+                },
+            )
 
     monkeypatch.setattr(oauth_mod, "httpx", type("X", (), {"AsyncClient": _HTTP}))
 
@@ -98,9 +102,7 @@ async def test_me_returns_user_for_valid_session(client, db_session):
     org = models.Org(name="Acme", slug="acme-oauth")
     db_session.add(org)
     await db_session.flush()
-    user = models.User(
-        org_id=org.id, email="z@example.com", name="Z", google_sub="g-z"
-    )
+    user = models.User(org_id=org.id, email="z@example.com", name="Z", google_sub="g-z")
     db_session.add(user)
     await db_session.commit()
 

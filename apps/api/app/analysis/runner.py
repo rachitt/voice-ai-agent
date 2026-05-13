@@ -3,6 +3,7 @@
 Invoked async after `call.ended`. Writes back to Call.analysis JSONB and
 emits an `analysis.completed` webhook (caller wires the outbox).
 """
+
 from __future__ import annotations
 
 import json
@@ -22,16 +23,14 @@ DEFAULT_SUMMARY_PROMPT = (
 )
 DEFAULT_SUCCESS_PROMPT = (
     "Did the agent successfully address the caller's request? "
-    "Respond with strict JSON: {\"success\": boolean, \"reason\": string}."
+    'Respond with strict JSON: {"success": boolean, "reason": string}.'
 )
 
 
 def _format_transcript(transcript: list[dict[str, Any]] | None) -> str:
     if not transcript:
         return "(empty)"
-    return "\n".join(
-        f"[{line.get('who','agent')}] {line.get('text','')}" for line in transcript
-    )
+    return "\n".join(f"[{line.get('who', 'agent')}] {line.get('text', '')}" for line in transcript)
 
 
 async def _run_summary(model_id: str, transcript: str, prompt: str) -> str:
@@ -46,9 +45,7 @@ async def _run_summary(model_id: str, transcript: str, prompt: str) -> str:
     return resp["choices"][0]["message"]["content"].strip()
 
 
-async def _run_structured(
-    model_id: str, transcript: str, schema: dict[str, Any]
-) -> dict[str, Any]:
+async def _run_structured(model_id: str, transcript: str, schema: dict[str, Any]) -> dict[str, Any]:
     sys = (
         "Extract data from this call transcript and return ONLY valid JSON "
         f"matching this schema: {json.dumps(schema)}"
@@ -91,11 +88,9 @@ async def analyze_call(
     db: AsyncSession,
     *,
     call_id: str,
-    analysis_model: str = "gemini-2.0-flash",
+    analysis_model: str = "gemini/gemini-3.1-flash-lite",
 ) -> dict[str, Any]:
-    call = (
-        await db.execute(select(Call).where(Call.id == call_id))
-    ).scalar_one_or_none()
+    call = (await db.execute(select(Call).where(Call.id == call_id))).scalar_one_or_none()
     if not call:
         raise LookupError(f"call {call_id} not found")
 
@@ -122,9 +117,7 @@ async def analyze_call(
 
     schema = plan.get("structured_data_schema")
     if schema:
-        out["structured_data"] = await _run_structured(
-            analysis_model, transcript_text, schema
-        )
+        out["structured_data"] = await _run_structured(analysis_model, transcript_text, schema)
 
     out["success_evaluation"] = await _run_success(
         analysis_model,

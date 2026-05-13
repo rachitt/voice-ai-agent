@@ -4,6 +4,7 @@ Definitions are LLM-tool-call shaped (OpenAI tool schema). Handlers receive
 a ToolContext with the call object, db session, and telnyx client; they may
 mutate call state, dispatch DTMF/transfer/hangup, or extract structured data.
 """
+
 from __future__ import annotations
 
 import json
@@ -61,6 +62,7 @@ async def dispatch(name: str, ctx: ToolContext) -> dict[str, Any]:
 
 # --- Definitions ---------------------------------------------------------
 
+
 def _def(name: str, description: str, params: dict[str, Any]) -> dict[str, Any]:
     return {
         "type": "function",
@@ -73,6 +75,7 @@ def _def(name: str, description: str, params: dict[str, Any]) -> dict[str, Any]:
 
 
 # --- Handlers ------------------------------------------------------------
+
 
 async def _end_call(ctx: ToolContext) -> dict[str, Any]:
     ctx.call.status = CallStatus.completed
@@ -89,9 +92,7 @@ async def _transfer_call(ctx: ToolContext) -> dict[str, Any]:
     if not to:
         return {"error": "missing_to"}
     if ctx.telnyx and ctx.call.provider_call_id and ctx.call.to_number:
-        await ctx.telnyx.transfer(
-            ctx.call.provider_call_id, to=to, from_=ctx.call.to_number
-        )
+        await ctx.telnyx.transfer(ctx.call.provider_call_id, to=to, from_=ctx.call.to_number)
     return {"transferred_to": to, "summary": summary}
 
 

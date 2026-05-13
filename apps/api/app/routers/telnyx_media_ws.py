@@ -10,6 +10,7 @@ and exchanges JSON envelopes carrying base64-encoded μ-law audio:
 We transcode that to/from linear16 @ 16 kHz so it flows through the same
 Pipeline + tool dispatch as a browser web-call.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -28,8 +29,8 @@ from app.core.logging import log
 from app.db.models import Call, CallEvent, CallStatus
 from app.db.session import SessionLocal
 from app.pipeline import event_bus
-from app.pipeline.orchestrator import AgentConfig, Pipeline, PipelineEvent, ToolCall
 from app.pipeline.flow_executor import FlowExecutor, has_executable_graph
+from app.pipeline.orchestrator import AgentConfig, Pipeline, PipelineEvent, ToolCall
 from app.pipeline.recording import CallRecorder, recording_key
 from app.pipeline.stt import DeepgramStream
 from app.pipeline.web_session import verify_ws_token
@@ -54,9 +55,7 @@ async def telnyx_media(
     await ws.accept()
 
     async with SessionLocal() as db:
-        call = (
-            await db.execute(select(Call).where(Call.id == call_id))
-        ).scalar_one_or_none()
+        call = (await db.execute(select(Call).where(Call.id == call_id))).scalar_one_or_none()
         if not call:
             await ws.send_json({"event": "error", "error": "call_not_found"})
             await ws.close(code=status.WS_1008_POLICY_VIOLATION)
@@ -77,24 +76,34 @@ async def telnyx_media(
 
 async def _run_pstn_session(ws: WebSocket, db: AsyncSession, call: Call, cfg: AgentConfig) -> None:
     telnyx = TelnyxClient()
+    custom_tools: dict[str, Any] = getattr(cfg, "_custom_tools", {}) or {}
 
     async def tool_dispatch(tc: ToolCall) -> dict[str, Any]:
         entry = REGISTRY.get(tc.name)
-        if not entry:
-            return {"error": "unknown_tool", "name": tc.name}
-        ctx = ToolContext(
-            call=call,
-            db=db,
-            telnyx=telnyx,
-            args=tc.arguments,
-            knowledge_base_ids=list(cfg.knowledge_base_ids or []),
-            embedding_model=cfg.embedding_model,
-        )
-        try:
-            return await entry["handler"](ctx)
-        except Exception as exc:
-            log.exception("telnyx.tool.error", name=tc.name, err=str(exc))
-            return {"error": "tool_failed", "detail": str(exc)}
+        if entry:
+            ctx = ToolContext(
+                call=call,
+                db=db,
+                telnyx=telnyx,
+                args=tc.arguments,
+                knowledge_base_ids=list(cfg.knowledge_base_ids or []),
+                embedding_model=cfg.embedding_model,
+            )
+            try:
+                return await entry["handler"](ctx)
+            except Exception as exc:
+                log.exception("telnyx.tool.error", name=tc.name, err=str(exc))
+                return {"error": "tool_failed", "detail": str(exc)}
+
+        # Custom HTTP tool — same dispatcher as the web-call path so calendar
+        # / CRM tools behave identically on PSTN.
+        row = custom_tools.get(tc.name)
+        if row:
+            from app.routers.web_call_ws import _dispatch_http_tool
+
+            return await _dispatch_http_tool(row, tc.arguments, call_id=call.id)
+
+        return {"error": "unknown_tool", "name": tc.name}
 
     pipe = Pipeline(cfg, tool_dispatch=tool_dispatch)
     recorder = CallRecorder(sample_rate=cfg.sample_rate)
@@ -135,7 +144,9 @@ async def _run_pstn_session(ws: WebSocket, db: AsyncSession, call: Call, cfg: Ag
         if not entry:
             return {"error": "kb_lookup_unavailable"}
         ctx = ToolContext(
-            call=call, db=db, telnyx=telnyx,
+            call=call,
+            db=db,
+            telnyx=telnyx,
             args={"kb_id": kb_id, "query": query, "top_k": top_k},
             knowledge_base_ids=list(cfg.knowledge_base_ids or []),
             embedding_model=cfg.embedding_model,
@@ -144,17 +155,18 @@ async def _run_pstn_session(ws: WebSocket, db: AsyncSession, call: Call, cfg: Ag
 
     async def _transfer(*, to: str, summary: str = "") -> None:
         if telnyx and call.provider_call_id:
-            await telnyx.transfer(
-                call.provider_call_id, to=to, from_=call.from_number or to
-            )
+            await telnyx.transfer(call.provider_call_id, to=to, from_=call.from_number or to)
 
     flow: FlowExecutor | None = None
     if has_executable_graph(cfg.flow_graph):
         if call.dynamic_variables is None:
             call.dynamic_variables = {}
         flow = FlowExecutor(
-            graph=cfg.flow_graph or {}, cfg=cfg, pipe=pipe,
-            kb_dispatch=_kb_call, transfer=_transfer,
+            graph=cfg.flow_graph or {},
+            cfg=cfg,
+            pipe=pipe,
+            kb_dispatch=_kb_call,
+            transfer=_transfer,
             variables=call.dynamic_variables,
         )
 
@@ -172,7 +184,9 @@ async def _run_pstn_session(ws: WebSocket, db: AsyncSession, call: Call, cfg: Ag
             evt = data.get("event")
             if evt == "start":
                 stream_id = (data.get("start") or {}).get("streamId")
-                call.provider_call_id = (data.get("start") or {}).get("callSid") or call.provider_call_id
+                call.provider_call_id = (data.get("start") or {}).get(
+                    "callSid"
+                ) or call.provider_call_id
             elif evt == "media":
                 payload = ((data.get("media") or {}).get("payload")) or ""
                 if not payload or stt is None:
@@ -271,5 +285,9 @@ async def _finalise(db: AsyncSession, call: Call, transcript: list[dict]) -> Non
     if call.started_at:
         call.duration_ms = int((now - call.started_at).total_seconds() * 1000)
     call.transcript = transcript or call.transcript
-    db.add(CallEvent(call_id=call.id, at=now, kind="telnyx.media.closed", payload={"turns": len(transcript)}))
+    db.add(
+        CallEvent(
+            call_id=call.id, at=now, kind="telnyx.media.closed", payload={"turns": len(transcript)}
+        )
+    )
     await db.commit()

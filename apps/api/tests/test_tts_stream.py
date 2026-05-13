@@ -158,7 +158,13 @@ async def test_audio_iterator_stops_on_error(monkeypatch):
     s = tts_mod.ElevenLabsStream(voice_id="v")
     async with s:
         out: list[bytes] = []
-        async for chunk in s.audio():
-            out.append(chunk)
+        # Provider error must raise so the orchestrator can surface a banner
+        # in the UI — silent return used to mean the agent went mute without
+        # any signal.
+        import pytest as _pytest
+
+        with _pytest.raises(tts_mod.TtsProviderError):
+            async for chunk in s.audio():
+                out.append(chunk)
         assert out == []
     cfg.get_settings.cache_clear()

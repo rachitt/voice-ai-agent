@@ -1,4 +1,5 @@
 """Post-call analysis runner + scheduler (gated on enable_post_call_analysis)."""
+
 from __future__ import annotations
 
 import pytest
@@ -13,7 +14,11 @@ from app.db import models
 @pytest.fixture
 def fake_complete(monkeypatch):
     """Stub `complete()` to return canned responses without an LLM call."""
-    canned = {"summary": "Two-line summary.", "structured": '{"intent":"refund"}', "success": '{"success":true,"reason":"resolved"}'}
+    canned = {
+        "summary": "Two-line summary.",
+        "structured": '{"intent":"refund"}',
+        "success": '{"success":true,"reason":"resolved"}',
+    }
     state = {"calls": 0}
 
     async def _complete(*, model_id, messages, temperature=0.0, **kw):
@@ -43,8 +48,11 @@ async def test_analyze_call_writes_summary_and_success(db_session, fake_complete
     db_session.add(ver)
     await db_session.flush()
     call = models.Call(
-        org_id=org.id, agent_id=agent.id, agent_version_id=ver.id,
-        direction=models.CallDirection.web, status=models.CallStatus.completed,
+        org_id=org.id,
+        agent_id=agent.id,
+        agent_version_id=ver.id,
+        direction=models.CallDirection.web,
+        status=models.CallStatus.completed,
         transcript=[
             {"role": "user", "text": "I want a refund"},
             {"role": "assistant", "text": "Sure, processed."},
@@ -70,16 +78,23 @@ async def test_analyze_call_uses_agent_version_analysis_plan(db_session, fake_co
     db_session.add(agent)
     await db_session.flush()
     ver = models.AgentVersion(
-        agent_id=agent.id, version=1,
+        agent_id=agent.id,
+        version=1,
         analysis_plan={
-            "structured_data_schema": {"type": "object", "properties": {"intent": {"type": "string"}}},
+            "structured_data_schema": {
+                "type": "object",
+                "properties": {"intent": {"type": "string"}},
+            },
         },
     )
     db_session.add(ver)
     await db_session.flush()
     call = models.Call(
-        org_id=org.id, agent_id=agent.id, agent_version_id=ver.id,
-        direction=models.CallDirection.web, status=models.CallStatus.completed,
+        org_id=org.id,
+        agent_id=agent.id,
+        agent_version_id=ver.id,
+        direction=models.CallDirection.web,
+        status=models.CallStatus.completed,
         transcript=[{"role": "user", "text": "refund please"}],
     )
     db_session.add(call)
@@ -111,8 +126,10 @@ async def test_schedule_post_call_runs_when_enabled(db_session, monkeypatch, fak
     class _SL:
         def __call__(self):
             return self
+
         async def __aenter__(self):
             return db_session
+
         async def __aexit__(self, *a):
             return False
 
@@ -128,8 +145,11 @@ async def test_schedule_post_call_runs_when_enabled(db_session, monkeypatch, fak
     db_session.add(ver)
     await db_session.flush()
     call = models.Call(
-        org_id=org.id, agent_id=agent.id, agent_version_id=ver.id,
-        direction=models.CallDirection.web, status=models.CallStatus.completed,
+        org_id=org.id,
+        agent_id=agent.id,
+        agent_version_id=ver.id,
+        direction=models.CallDirection.web,
+        status=models.CallStatus.completed,
         transcript=[{"role": "user", "text": "hello"}],
     )
     db_session.add(call)
@@ -153,8 +173,10 @@ async def test_scheduler_emits_outbox_webhook_when_server_url_set(
     class _SL:
         def __call__(self):
             return self
+
         async def __aenter__(self):
             return db_session
+
         async def __aexit__(self, *a):
             return False
 
@@ -172,8 +194,11 @@ async def test_scheduler_emits_outbox_webhook_when_server_url_set(
     db_session.add(ver)
     await db_session.flush()
     call = models.Call(
-        org_id=org.id, agent_id=agent.id, agent_version_id=ver.id,
-        direction=models.CallDirection.web, status=models.CallStatus.completed,
+        org_id=org.id,
+        agent_id=agent.id,
+        agent_version_id=ver.id,
+        direction=models.CallDirection.web,
+        status=models.CallStatus.completed,
         transcript=[{"role": "user", "text": "ok"}],
     )
     db_session.add(call)
@@ -184,10 +209,14 @@ async def test_scheduler_emits_outbox_webhook_when_server_url_set(
     await task
 
     rows = (
-        await db_session.execute(
-            select(models.WebhookOutbox).where(models.WebhookOutbox.org_id == org.id)
+        (
+            await db_session.execute(
+                select(models.WebhookOutbox).where(models.WebhookOutbox.org_id == org.id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(rows) == 1
     assert rows[0].event == "analysis.completed"
     assert rows[0].url == "https://hooks.example/analysis"

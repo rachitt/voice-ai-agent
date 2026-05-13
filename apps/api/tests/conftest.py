@@ -92,8 +92,6 @@ async def auth_headers(db_session: AsyncSession) -> dict[str, str]:
     db_session.add(org)
     await db_session.flush()
     raw, hashed = generate_api_key("sk_test")
-    db_session.add(
-        models.ApiKey(org_id=org.id, name="test", prefix=raw[:10], key_hash=hashed)
-    )
+    db_session.add(models.ApiKey(org_id=org.id, name="test", prefix=raw[:10], key_hash=hashed))
     await db_session.commit()
     return {"Authorization": f"Bearer {raw}"}

@@ -12,6 +12,7 @@ def _setup_key(monkeypatch) -> nacl.signing.SigningKey:
     pub_b64 = base64.b64encode(bytes(sk.verify_key)).decode()
     monkeypatch.setenv("VOICE_TELNYX_WEBHOOK_PUBLIC_KEY", pub_b64)
     from app.core.config import get_settings
+
     get_settings.cache_clear()
     return sk
 

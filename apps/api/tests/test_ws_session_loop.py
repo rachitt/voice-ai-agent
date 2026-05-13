@@ -218,7 +218,7 @@ async def _seed_call_async(url: str, *, direction: str, status: str, first_messa
                     " vad_silence_ms, tools, knowledge_base_ids, dynamic_variables, "
                     " created_at, updated_at) "
                     "VALUES (:id, :ag, 1, 'draft', :fm, 'be brief', "
-                    " 'gemini-2.0-flash', 'eleven_flash_v2_5', 'deepgram-nova-3', 'en', "
+                    " 'gemini/gemini-3.1-flash-lite', '21m00Tcm4TlvDq8ikWAM', 'deepgram-nova-3', 'en', "
                     " 0.5, 700, '[]'::jsonb, '[]'::jsonb, '{}'::jsonb, :ts, :ts)"
                 ),
                 {"id": ver_id, "ag": agent_id, "fm": first_message, "ts": now},

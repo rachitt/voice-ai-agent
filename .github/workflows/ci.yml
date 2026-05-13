@@ -94,7 +94,7 @@ jobs:
         run: |
           uv run pytest -q -n auto \
             --cov=app --cov-report=term-missing --cov-report=xml \
-            --cov-fail-under=90
+            --cov-fail-under=94
 
       - name: Upload coverage report
         if: always()

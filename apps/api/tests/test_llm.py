@@ -32,7 +32,7 @@ def test_provider_kwargs_gemini(monkeypatch):
 
     cfg.get_settings.cache_clear()
     monkeypatch.setenv("VOICE_GEMINI_API_KEY", "gem-xyz")
-    assert llm_mod._provider_kwargs("gemini-2.0-flash") == {"api_key": "gem-xyz"}
+    assert llm_mod._provider_kwargs("gemini/gemini-3.1-flash-lite") == {"api_key": "gem-xyz"}
     cfg.get_settings.cache_clear()
 
 
@@ -101,7 +101,7 @@ async def test_stream_yields_text_deltas(monkeypatch):
     monkeypatch.setattr(llm_mod.litellm, "acompletion", fake_acompletion)
     out: list[str] = []
     async for tok in llm_mod.stream(
-        model_id="gemini-2.0-flash",
+        model_id="gemini/gemini-3.1-flash-lite",
         messages=[llm_mod.Message(role="user", content="hi")],
         tools=[{"type": "function", "function": {"name": "x"}}],
     ):

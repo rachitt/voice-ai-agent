@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, RefreshCw } from 'lucide-react'
-import { api, getApiBase, getApiKey, setApiBase, setApiKey, type AgentSummary } from '@/lib/api'
+import { api, type AgentSummary } from '@/lib/api'
 
+/**
+ * Console panel that lists the signed-in org's agents and lets the user
+ * spawn a new one. Auth is owned by Shell/AuthGate — by the time this
+ * renders, the session cookie is known-good, so we just call the API.
+ */
 export function AgentsListPanel() {
   const navigate = useNavigate()
   const [agents, setAgents] = useState<AgentSummary[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [showAuth, setShowAuth] = useState(!getApiKey())
-  const [apiBase, setApiBaseLocal] = useState(getApiBase())
-  const [apiKey, setApiKeyLocal] = useState(getApiKey())
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
 
@@ -29,9 +31,9 @@ export function AgentsListPanel() {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- auth state change triggers agents refetch
-    if (!showAuth) load()
-  }, [showAuth])
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load
+    load()
+  }, [])
 
   async function createAgent() {
     const name = newName.trim()
@@ -49,52 +51,6 @@ export function AgentsListPanel() {
     } catch (e) {
       setErr(String(e))
     }
-  }
-
-  function saveAuth() {
-    setApiBase(apiBase)
-    setApiKey(apiKey)
-    setShowAuth(false)
-  }
-
-  if (showAuth) {
-    return (
-      <section className="panel p-4" data-testid="agents-panel">
-        <div className="mb-2 text-sm font-medium">Connect to API</div>
-        <div className="mb-2 text-xs text-muted">Paste your API base + key to load your agents.</div>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="text-muted">API base</span>
-            <input
-              data-testid="api-base-input"
-              value={apiBase}
-              onChange={(e) => setApiBaseLocal(e.target.value)}
-              className="rounded border border-border bg-panel-2 px-2 py-1.5"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="text-muted">API key</span>
-            <input
-              type="password"
-              data-testid="api-key-input"
-              value={apiKey}
-              onChange={(e) => setApiKeyLocal(e.target.value)}
-              className="rounded border border-border bg-panel-2 px-2 py-1.5"
-              placeholder="sk_live_…"
-            />
-          </label>
-        </div>
-        <div className="mt-3 flex justify-end gap-2">
-          <button
-            data-testid="auth-save"
-            onClick={saveAuth}
-            className="rounded-[8px] bg-accent px-3 py-1.5 text-xs text-bg"
-          >
-            Connect
-          </button>
-        </div>
-      </section>
-    )
   }
 
   return (
@@ -116,12 +72,6 @@ export function AgentsListPanel() {
             className="inline-flex items-center gap-1 rounded-[8px] bg-accent px-3 py-1.5 text-xs text-bg"
           >
             <Plus className="h-3.5 w-3.5" /> New
-          </button>
-          <button
-            onClick={() => setShowAuth(true)}
-            className="text-[11px] text-muted hover:text-fg"
-          >
-            change creds
           </button>
         </div>
       </div>

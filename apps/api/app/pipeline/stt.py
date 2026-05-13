@@ -3,6 +3,7 @@
 Async producer: caller pushes PCM frames; iterator yields TranscriptEvents.
 PCM expected as signed 16-bit LE mono at agreed sample rate (default 16000).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -126,13 +127,17 @@ class DeepgramStream:
 
             mtype = msg.get("type")
             if mtype == "SpeechStarted":
-                yield TranscriptEvent(text="", is_final=False, speech_final=False, confidence=0, type="vad", raw=msg)
+                yield TranscriptEvent(
+                    text="", is_final=False, speech_final=False, confidence=0, type="vad", raw=msg
+                )
                 continue
             if mtype == "UtteranceEnd":
-                yield TranscriptEvent(text="", is_final=True, speech_final=True, confidence=1.0, type="vad", raw=msg)
+                yield TranscriptEvent(
+                    text="", is_final=True, speech_final=True, confidence=1.0, type="vad", raw=msg
+                )
                 continue
 
-            alt = (((msg.get("channel") or {}).get("alternatives") or [{}])[0])
+            alt = ((msg.get("channel") or {}).get("alternatives") or [{}])[0]
             text = alt.get("transcript", "")
             if not text and not msg.get("is_final"):
                 continue

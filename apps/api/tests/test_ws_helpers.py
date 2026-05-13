@@ -7,6 +7,7 @@ that records send_bytes/send_json/send_text calls.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -388,7 +389,8 @@ def test_resolve_tools_string_ref():
     ver = models.AgentVersion(
         agent_id="ag_x", version=1, tools=["end_call"], knowledge_base_ids=[]
     )
-    names = [t["function"]["name"] for t in wcws._resolve_tools(ver)]
+    defs, _custom = asyncio.run(wcws._resolve_tools(ver))
+    names = [t["function"]["name"] for t in defs]
     assert "end_call" in names
 
 
@@ -399,7 +401,8 @@ def test_resolve_tools_dict_ref():
         tools=[{"name": "send_dtmf"}],
         knowledge_base_ids=[],
     )
-    names = [t["function"]["name"] for t in wcws._resolve_tools(ver)]
+    defs, _custom = asyncio.run(wcws._resolve_tools(ver))
+    names = [t["function"]["name"] for t in defs]
     assert "send_dtmf" in names
 
 
@@ -407,7 +410,8 @@ def test_resolve_tools_unknown_string_ref_skipped():
     ver = models.AgentVersion(
         agent_id="ag_x", version=1, tools=["does_not_exist"], knowledge_base_ids=[]
     )
-    assert wcws._resolve_tools(ver) == []
+    defs, _custom = asyncio.run(wcws._resolve_tools(ver))
+    assert defs == []
 
 
 def test_resolve_tools_custom_function_passthrough():
@@ -418,8 +422,8 @@ def test_resolve_tools_custom_function_passthrough():
     ver = models.AgentVersion(
         agent_id="ag_x", version=1, tools=[custom], knowledge_base_ids=[]
     )
-    out = wcws._resolve_tools(ver)
-    assert out == [custom]
+    defs, _custom = asyncio.run(wcws._resolve_tools(ver))
+    assert defs == [custom]
 
 
 # ----- WS auth gate (token rejection) --------------------------------------

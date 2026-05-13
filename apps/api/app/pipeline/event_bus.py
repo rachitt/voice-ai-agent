@@ -6,6 +6,7 @@ payloads to many subscribers (SSE listeners on /v1/calls/:id/stream).
 This is intentionally process-local: it survives a single API worker only.
 For multi-worker, swap to Redis pub/sub behind the same interface.
 """
+
 from __future__ import annotations
 
 import asyncio

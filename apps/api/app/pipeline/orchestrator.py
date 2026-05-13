@@ -12,6 +12,7 @@ Wire-up at call-time:
         ...
     await pipe.feed_user_text("hello", is_final=True)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -27,9 +28,10 @@ from app.pipeline import llm as llm_mod
 # Public dataclasses
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class AgentConfig:
-    model_id: str = "gemini/gemini-2.0-flash"
+    model_id: str = "gemini/gemini-3.1-flash-lite"
     voice_id: str = "21m00Tcm4TlvDq8ikWAM"
     system_prompt: str = ""
     first_message: str | None = None
@@ -64,7 +66,10 @@ LLMEvent = TextChunk | ToolCall | TurnComplete
 
 @dataclass
 class PipelineEvent:
-    kind: str  # user_text, agent_text, agent_audio, tool_call, tool_result, turn_end, error, started
+    kind: (
+        str  # user_text, agent_text, agent_audio, tool_call, tool_result,
+        #     turn_end, error, started, flow_node
+    )
     text: str | None = None
     is_final: bool = False
     audio: bytes | None = None
@@ -88,6 +93,7 @@ ToolDispatchFn = Callable[[ToolCall], Awaitable[dict[str, Any]]]
 # ---------------------------------------------------------------------------
 # Default litellm-backed LLM turn
 # ---------------------------------------------------------------------------
+
 
 async def litellm_turn(
     *,
@@ -122,9 +128,7 @@ async def litellm_turn(
         choice = choices[0]
         delta = getattr(choice, "delta", None) or choice.get("delta") or {}
         content = (
-            getattr(delta, "content", None)
-            if hasattr(delta, "content")
-            else delta.get("content")
+            getattr(delta, "content", None) if hasattr(delta, "content") else delta.get("content")
         )
         if content:
             yield TextChunk(text=content)
@@ -141,13 +145,21 @@ async def litellm_turn(
                     idx = tcd.get("index", 0)
                 idx = idx if idx is not None else 0
                 slot = tc_buf.setdefault(idx, {"id": "", "name": "", "args": ""})
-                tcd_id = getattr(tcd, "id", None) or (tcd.get("id") if isinstance(tcd, dict) else None)
+                tcd_id = getattr(tcd, "id", None) or (
+                    tcd.get("id") if isinstance(tcd, dict) else None
+                )
                 if tcd_id:
                     slot["id"] = tcd_id
-                fn = getattr(tcd, "function", None) or (tcd.get("function") if isinstance(tcd, dict) else None)
+                fn = getattr(tcd, "function", None) or (
+                    tcd.get("function") if isinstance(tcd, dict) else None
+                )
                 if fn is not None:
-                    fname = getattr(fn, "name", None) or (fn.get("name") if isinstance(fn, dict) else None)
-                    fargs = getattr(fn, "arguments", None) or (fn.get("arguments") if isinstance(fn, dict) else None)
+                    fname = getattr(fn, "name", None) or (
+                        fn.get("name") if isinstance(fn, dict) else None
+                    )
+                    fargs = getattr(fn, "arguments", None) or (
+                        fn.get("arguments") if isinstance(fn, dict) else None
+                    )
                     if fname:
                         slot["name"] = fname
                     if fargs:
@@ -170,7 +182,11 @@ async def litellm_turn(
                 args = _json.loads(slot["args"]) if slot["args"] else {}
             except Exception:
                 args = {"_raw": slot["args"]}
-            tool_calls.append(ToolCall(id=slot["id"] or f"call_{len(tool_calls)}", name=slot["name"], arguments=args))
+            tool_calls.append(
+                ToolCall(
+                    id=slot["id"] or f"call_{len(tool_calls)}", name=slot["name"], arguments=args
+                )
+            )
 
     yield TurnComplete(finish_reason=finish_reason, tool_calls=tool_calls)
 
@@ -179,7 +195,10 @@ async def litellm_turn(
 # Default ElevenLabs TTS one-shot
 # ---------------------------------------------------------------------------
 
-async def elevenlabs_tts(text: str, *, voice_id: str, sample_rate: int = 16000) -> AsyncIterator[bytes]:
+
+async def elevenlabs_tts(
+    text: str, *, voice_id: str, sample_rate: int = 16000
+) -> AsyncIterator[bytes]:
     """One-shot TTS for a sentence chunk. Use Pipeline._tts_stream for streaming."""
     from app.pipeline.tts import ElevenLabsStream
 
@@ -195,6 +214,7 @@ async def elevenlabs_tts(text: str, *, voice_id: str, sample_rate: int = 16000) 
 # ---------------------------------------------------------------------------
 
 _SENT_END = re.compile(r"([.!?])(\s|$)|([:;])(\s)")
+
 
 def split_for_tts(buf: str, *, min_chars: int = 8) -> tuple[list[str], str]:
     """Split `buf` at sentence ends; keep last partial as remainder."""
@@ -218,6 +238,7 @@ def split_for_tts(buf: str, *, min_chars: int = 8) -> tuple[list[str], str]:
 # ---------------------------------------------------------------------------
 # Pipeline
 # ---------------------------------------------------------------------------
+
 
 class Pipeline:
     def __init__(
@@ -247,11 +268,15 @@ class Pipeline:
         self._STEP_MARKER = "__flow_step__"
 
     async def _default_llm(self, **kw):
-        async for e in litellm_turn(model_id=self.cfg.model_id, temperature=self.cfg.temperature, **kw):
+        async for e in litellm_turn(
+            model_id=self.cfg.model_id, temperature=self.cfg.temperature, **kw
+        ):
             yield e
 
     async def _default_tts(self, text: str):
-        async for frame in elevenlabs_tts(text, voice_id=self.cfg.voice_id, sample_rate=self.cfg.sample_rate):
+        async for frame in elevenlabs_tts(
+            text, voice_id=self.cfg.voice_id, sample_rate=self.cfg.sample_rate
+        ):
             yield frame
 
     # --- public API ---------------------------------------------------------
@@ -316,19 +341,30 @@ class Pipeline:
     def set_step_prompt(self, text: str | None) -> None:
         """Replace the active per-step system note (FlowExecutor)."""
         self._messages = [
-            m for m in self._messages
-            if not (m.get("role") == "system" and isinstance(m.get("content"), str)
-                    and m["content"].startswith(self._STEP_MARKER))
+            m
+            for m in self._messages
+            if not (
+                m.get("role") == "system"
+                and isinstance(m.get("content"), str)
+                and m["content"].startswith(self._STEP_MARKER)
+            )
         ]
         if text:
-            self._messages.append(
-                {"role": "system", "content": f"{self._STEP_MARKER}{text}"}
-            )
+            self._messages.append({"role": "system", "content": f"{self._STEP_MARKER}{text}"})
 
     def append_system_note(self, text: str) -> None:
         """Inject a plain system message (e.g. KB results) for the next turn."""
         if text:
             self._messages.append({"role": "system", "content": text})
+
+    def emit_event(self, kind: str, **fields: Any) -> None:
+        """Push a custom event onto the outbound stream.
+
+        Used by FlowExecutor to surface graph-execution state (e.g. which
+        flow node just became active) to WS consumers without coupling the
+        executor to the transport layer.
+        """
+        self._out.put_nowait(PipelineEvent(kind=kind, **fields))
 
     def message_count(self) -> int:
         """Test/debug accessor for the underlying message buffer length."""
@@ -402,7 +438,9 @@ class Pipeline:
             )
             for tc in tool_calls:
                 await self._out.put(
-                    PipelineEvent(kind="tool_call", text=tc.name, data={"id": tc.id, "args": tc.arguments})
+                    PipelineEvent(
+                        kind="tool_call", text=tc.name, data={"id": tc.id, "args": tc.arguments}
+                    )
                 )
                 result: dict[str, Any] = {"ok": True}
                 if self._dispatch:
@@ -412,7 +450,9 @@ class Pipeline:
                         log.exception("pipeline.tool.error", name=tc.name, err=str(exc))
                         result = {"error": "tool_failed", "detail": str(exc)}
                 await self._out.put(
-                    PipelineEvent(kind="tool_result", text=tc.name, data={"id": tc.id, "result": result})
+                    PipelineEvent(
+                        kind="tool_result", text=tc.name, data={"id": tc.id, "result": result}
+                    )
                 )
                 self._messages.append(
                     {
@@ -424,16 +464,61 @@ class Pipeline:
                 )
 
     async def _speak(self, text: str, *, also_as_event: bool) -> None:
+        from app.pipeline import tts_cache
+        from app.pipeline.tts import TtsProviderError
+
         if also_as_event:
             await self._out.put(PipelineEvent(kind="agent_text", text=text, is_final=True))
+
+        # Opportunistic TTS cache — see app/pipeline/tts_cache.py. Big wins
+        # for first_message + flow-node prompts, both of which repeat across
+        # calls. Default TTS model is `eleven_flash_v2_5` and we always speak
+        # at 16 kHz mono LE16, so those are the cache-key dimensions.
+        TTS_MODEL = "eleven_flash_v2_5"
+        SAMPLE_RATE = 16000
+        FRAME_BYTES = 1280  # ~40ms @ 16 kHz mono LE16; keeps the WS cadence sane
+        cached = await tts_cache.get_pcm(
+            voice_id=self.cfg.voice_id,
+            tts_model_id=TTS_MODEL,
+            sample_rate=SAMPLE_RATE,
+            text=text,
+        )
+        if cached:
+            for i in range(0, len(cached), FRAME_BYTES):
+                await self._out.put(
+                    PipelineEvent(kind="agent_audio", audio=cached[i : i + FRAME_BYTES])
+                )
+            return
+
+        accumulated = bytearray()
         try:
             async for frame in self._tts(text):
+                accumulated.extend(frame)
                 await self._out.put(PipelineEvent(kind="agent_audio", audio=frame))
         except asyncio.CancelledError:
             raise
+        except TtsProviderError as exc:
+            # Dedicated kind so the UI can render a specific banner ("TTS
+            # provider quota exceeded — agent text only") rather than a
+            # generic error toast that gets lost.
+            log.warning("pipeline.tts.provider_error", err=str(exc))
+            await self._out.put(
+                PipelineEvent(kind="tts_error", data={"err": str(exc)})
+            )
         except Exception as exc:
             log.exception("pipeline.tts.error", err=str(exc))
             await self._out.put(PipelineEvent(kind="error", data={"err": f"tts:{exc}"}))
+            return
+        # Cache only on full successful synthesis. Partial captures (cancelled
+        # mid-utterance, provider error) are skipped so we don't burn a key
+        # on a truncated waveform.
+        await tts_cache.put_pcm(
+            voice_id=self.cfg.voice_id,
+            tts_model_id=TTS_MODEL,
+            sample_rate=SAMPLE_RATE,
+            text=text,
+            pcm=bytes(accumulated),
+        )
 
 
 def _safe_json(obj: Any) -> str:

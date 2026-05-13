@@ -2,6 +2,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { cn } from '@/lib/cn'
 import { RULES } from './connection-rules'
 import { KIND_ICON, KIND_TINT } from './icons'
+import { useBuilder } from './store'
 import type { StepNode as TStepNode } from './types'
 
 const HANDLE_BASE =
@@ -13,15 +14,24 @@ export function StepNodeView({ id, data, selected }: NodeProps<TStepNode>) {
   const rule = RULES[data.kind]
   const canTarget = rule.inAllowed
   const canSource = rule.outMax > 0 && !rule.terminal
+  // Live-call execution highlight. The TestCallModal flips this id every
+  // time the FlowExecutor emits `flow_node` on the WS. Border + pulsing
+  // glow make the active step pop without disturbing layout.
+  const active = useBuilder((s) => s.activeFlowNodeId === id)
   return (
     <div
       data-testid="step-node"
       data-node-id={id}
       data-kind={data.kind}
       data-selected={selected ? '1' : '0'}
+      data-active={active ? '1' : '0'}
       className={cn(
         'group relative w-[220px] rounded-[12px] border bg-panel shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)] transition-all',
-        selected ? 'border-accent shadow-[0_0_0_1px_var(--color-accent)]' : 'border-border',
+        active
+          ? 'border-emerald-400 shadow-[0_0_0_2px_rgba(52,211,153,0.6),0_0_24px_rgba(52,211,153,0.45)] animate-pulse'
+          : selected
+            ? 'border-accent shadow-[0_0_0_1px_var(--color-accent)]'
+            : 'border-border',
       )}
     >
       <Handle

@@ -1,4 +1,5 @@
 """GET /v1/calls/:id/stream — SSE endpoint smoke."""
+
 from __future__ import annotations
 
 import pytest
@@ -27,14 +28,10 @@ async def test_stream_rejects_raw_api_key_in_query(client, auth_headers):
 
 @pytest.mark.asyncio
 async def test_stream_token_endpoint_mints_short_lived_token(client, auth_headers):
-    r = await client.post(
-        "/v1/agents", json={"name": "Streamer"}, headers=auth_headers
-    )
+    r = await client.post("/v1/agents", json={"name": "Streamer"}, headers=auth_headers)
     assert r.status_code == 201, r.text
     agent_id = r.json()["id"]
-    r = await client.post(
-        "/v1/calls/web", json={"agent_id": agent_id}, headers=auth_headers
-    )
+    r = await client.post("/v1/calls/web", json={"agent_id": agent_id}, headers=auth_headers)
     assert r.status_code == 201, r.text
     call_id = r.json()["id"]
 

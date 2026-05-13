@@ -66,15 +66,19 @@ async def run_once() -> int:
     processed = 0
     async with SessionLocal() as db:
         rows = (
-            await db.execute(
-                select(WebhookOutbox)
-                .where(
-                    WebhookOutbox.status == "pending",
-                    WebhookOutbox.next_attempt_at <= now,
+            (
+                await db.execute(
+                    select(WebhookOutbox)
+                    .where(
+                        WebhookOutbox.status == "pending",
+                        WebhookOutbox.next_attempt_at <= now,
+                    )
+                    .limit(50)
                 )
-                .limit(50)
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         if not rows:
             return 0

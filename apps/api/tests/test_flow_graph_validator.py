@@ -1,4 +1,5 @@
 """Server-side flow_graph validator + publish gate."""
+
 from __future__ import annotations
 
 import pytest

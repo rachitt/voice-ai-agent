@@ -3,6 +3,7 @@
 Text chunks pushed via push_text(); raw PCM frames yielded over the audio()
 async iterator. Format: pcm_16000 (16-bit LE mono at 16 kHz) by default.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -41,9 +42,7 @@ class ElevenLabsStream:
         if not key:
             raise RuntimeError("ELEVENLABS_API_KEY not configured")
         url = EL_WS.format(voice_id=self.voice_id) + (
-            f"?model_id={self.model_id}"
-            f"&output_format=pcm_{self.sample_rate}"
-            "&auto_mode=true"
+            f"?model_id={self.model_id}&output_format=pcm_{self.sample_rate}&auto_mode=true"
         )
         self._ws = await websockets.connect(url, additional_headers={"xi-api-key": key})
         await self._ws.send(
@@ -95,5 +94,16 @@ class ElevenLabsStream:
             if msg.get("isFinal"):
                 return
             if msg.get("error"):
+                # Raise instead of swallowing — the orchestrator's `_speak`
+                # catch will emit a pipeline error event the WS forwards to
+                # the dashboard. Silent TTS failure was the worst kind of bug:
+                # LLM kept generating text, but the user heard nothing.
                 log.warning("tts.error", err=msg["error"])
-                return
+                raise TtsProviderError(str(msg["error"]))
+
+
+class TtsProviderError(RuntimeError):
+    """ElevenLabs returned an error frame (quota_exceeded, voice_not_found, …).
+
+    Surfaced up to `Pipeline._speak` so the WS can tell the UI why the
+    agent went silent."""

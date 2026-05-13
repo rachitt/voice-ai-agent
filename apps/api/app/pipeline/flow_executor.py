@@ -28,6 +28,7 @@ V1 node-kind coverage:
 Anything beyond the V1 surface (e.g. unknown kinds) falls through to the
 next outbound edge with a warning, mirroring the validator's policy.
 """
+
 from __future__ import annotations
 
 import json
@@ -212,6 +213,14 @@ class FlowExecutor:
             return
         self.current_id = nid
         log.info("flow.enter", node=nid, kind=nv.kind)
+        # Surface the visited node to the WS so the builder canvas can
+        # highlight whichever step the agent is at right now. Best-effort —
+        # if the pipe is mid-shutdown the queue may reject, which is fine
+        # since the call is ending anyway.
+        try:
+            self.pipe.emit_event("flow_node", data={"node_id": nid, "kind": nv.kind})
+        except Exception:
+            pass
 
         if nv.kind == "end":
             await self._terminate()

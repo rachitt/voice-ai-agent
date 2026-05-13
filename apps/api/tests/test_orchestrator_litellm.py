@@ -182,6 +182,6 @@ async def test_litellm_turn_passes_gemini_api_key(monkeypatch):
     import litellm as _lite
 
     monkeypatch.setattr(_lite, "acompletion", fake_acompletion)
-    await _drain(litellm_turn(messages=[], tools=None, model_id="gemini-2.0-flash"))
+    await _drain(litellm_turn(messages=[], tools=None, model_id="gemini/gemini-3.1-flash-lite"))
     assert captured.get("api_key") == "g-key"
     cfg.get_settings.cache_clear()

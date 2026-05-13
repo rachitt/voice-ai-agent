@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Local pre-push gate. Mirrors the GH Actions `required` checks so devs
+# don't push branches that will fail CI seconds later.
+#
+# Install by running: scripts/install-hooks.sh
+# Bypass (rare, e.g. WIP branches that aren't going to main): git push --no-verify
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+# Only run the full gate when pushing to main or a PR-targeting branch.
+remote=${1:-}
+branch=$(git rev-parse --abbrev-ref HEAD)
+
+if [ "$branch" = "main" ]; then
+  echo "::warning: pushing directly to main. Branch protection should block this."
+fi
+
+echo "[pre-push] api: ruff check + format + pytest"
+(
+  cd apps/api
+  uv run ruff check app tests
+  uv run ruff format --check app tests
+  uv run pytest -q -n auto
+)
+
+echo "[pre-push] web: typecheck + build"
+(
+  cd apps/web
+  # lint is informational only today (see CI yaml note). Run separately
+  # if you want the warnings: `pnpm --filter web lint`.
+  pnpm exec tsc -b --pretty false
+  pnpm build
+)
+
+echo "[pre-push] OK"

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import Principal, require_api_key
+from app.core.auth import AuthedPrincipal, require_principal
 from app.db.models import PhoneNumber
 from app.db.session import get_db
 from app.schemas.phone_numbers import PhoneNumberCreate, PhoneNumberOut, PhoneNumberUpdate
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/v1/phone-numbers", tags=["phone-numbers"])
 async def create_phone_number(
     body: PhoneNumberCreate,
     db: AsyncSession = Depends(get_db),
-    p: Principal = Depends(require_api_key),
+    p: AuthedPrincipal = Depends(require_principal),
 ) -> PhoneNumber:
     pn = PhoneNumber(org_id=p.org.id, **body.model_dump())
     db.add(pn)
@@ -26,13 +26,17 @@ async def create_phone_number(
 @router.get("", response_model=list[PhoneNumberOut])
 async def list_phone_numbers(
     db: AsyncSession = Depends(get_db),
-    p: Principal = Depends(require_api_key),
+    p: AuthedPrincipal = Depends(require_principal),
 ) -> list[PhoneNumber]:
     rows = (
-        await db.execute(
-            select(PhoneNumber).where(PhoneNumber.org_id == p.org.id).order_by(PhoneNumber.e164)
+        (
+            await db.execute(
+                select(PhoneNumber).where(PhoneNumber.org_id == p.org.id).order_by(PhoneNumber.e164)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return list(rows)
 
 
@@ -41,7 +45,7 @@ async def update_phone_number(
     pn_id: str,
     body: PhoneNumberUpdate,
     db: AsyncSession = Depends(get_db),
-    p: Principal = Depends(require_api_key),
+    p: AuthedPrincipal = Depends(require_principal),
 ) -> PhoneNumber:
     pn = (
         await db.execute(

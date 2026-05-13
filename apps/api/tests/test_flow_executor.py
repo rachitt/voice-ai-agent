@@ -1,4 +1,5 @@
 """Text-mode tests for FlowExecutor — drives a Pipeline through graph states."""
+
 from __future__ import annotations
 
 import asyncio
@@ -165,8 +166,7 @@ async def test_executor_collect_advances_after_user_turn():
 
     # Confirm the step prompt got installed.
     assert any(
-        isinstance(m.get("content"), str)
-        and "Ask the user for their name." in m["content"]
+        isinstance(m.get("content"), str) and "Ask the user for their name." in m["content"]
         for m in pipe._messages
     )
 
@@ -185,7 +185,9 @@ async def test_executor_kb_lookup_injects_system_note_before_next_collect():
     graph = G(
         ("node", "g", "greeting", {"prompt": "Hi."}),
         (
-            "node", "k", "kb_lookup",
+            "node",
+            "k",
+            "kb_lookup",
             {"kb_id": "kb_x", "query_template": "refunds policy", "top_k": 2},
         ),
         ("node", "c", "collect", {"prompt": "Help with refunds."}),
@@ -377,14 +379,13 @@ async def test_set_step_prompt_replaces_prior_step_prompt():
     pipe.set_step_prompt("first step")
     pipe.set_step_prompt("second step")
     step_msgs = [
-        m for m in pipe._messages
+        m
+        for m in pipe._messages
         if m.get("role") == "system" and "second step" in (m.get("content") or "")
     ]
     assert len(step_msgs) == 1
     # The original 'first step' marker is gone.
-    assert not any(
-        "first step" in (m.get("content") or "") for m in pipe._messages
-    )
+    assert not any("first step" in (m.get("content") or "") for m in pipe._messages)
 
 
 # ---------- no-root graph is a no-op --------------------------------------
@@ -413,10 +414,7 @@ async def test_executor_renders_template_in_greeting_and_collect():
     reader_task = asyncio.create_task(reader())
     await flow.start()
     # Collect step prompt rendered immediately (no async event drain needed).
-    assert any(
-        "Help Sam with refunds." in (m.get("content") or "")
-        for m in pipe._messages
-    )
+    assert any("Help Sam with refunds." in (m.get("content") or "") for m in pipe._messages)
     await pipe.feed_user_text("ok")
     await asyncio.wait_for(reader_task, timeout=2.0)
     # After full drain, greeting audio is in the event stream.
@@ -429,7 +427,9 @@ async def test_executor_renders_kb_query_template():
     graph = G(
         ("node", "g", "greeting", {"prompt": "Hi."}),
         (
-            "node", "k", "kb_lookup",
+            "node",
+            "k",
+            "kb_lookup",
             {"kb_id": "kb_x", "query_template": "refunds for {{order_id}}", "top_k": 1},
         ),
         ("node", "c", "collect", {"prompt": "help"}),
@@ -447,8 +447,11 @@ async def test_executor_renders_kb_query_template():
     cfg = AgentConfig()
     pipe = Pipeline(cfg, llm=text_llm(["ok"]), tts=fake_tts())
     flow = FlowExecutor(
-        graph=graph, cfg=cfg, pipe=pipe,
-        kb_dispatch=fake_kb, variables={"order_id": "A-42"},
+        graph=graph,
+        cfg=cfg,
+        pipe=pipe,
+        kb_dispatch=fake_kb,
+        variables={"order_id": "A-42"},
     )
 
     async def reader():
@@ -474,7 +477,9 @@ def test_render_supports_dotted_keys():
     cfg = AgentConfig()
     pipe = Pipeline(cfg, llm=text_llm([]), tts=fake_tts())
     flow = FlowExecutor(
-        graph={"nodes": [], "edges": []}, cfg=cfg, pipe=pipe,
+        graph={"nodes": [], "edges": []},
+        cfg=cfg,
+        pipe=pipe,
         variables={"customer": {"email": "x@y.com", "tier": "gold"}},
     )
     assert flow._render("{{customer.email}}") == "x@y.com"
@@ -486,7 +491,9 @@ def test_render_non_string_values():
     cfg = AgentConfig()
     pipe = Pipeline(cfg, llm=text_llm([]), tts=fake_tts())
     flow = FlowExecutor(
-        graph={"nodes": [], "edges": []}, cfg=cfg, pipe=pipe,
+        graph={"nodes": [], "edges": []},
+        cfg=cfg,
+        pipe=pipe,
         variables={"n": 42, "lst": [1, 2], "obj": {"k": "v"}},
     )
     assert flow._render("n={{n}}") == "n=42"
@@ -509,18 +516,22 @@ async def test_api_node_merges_response_into_vars(monkeypatch):
     class _Resp:
         status_code = 200
         text = '{"account_id": "AC-99", "tier": "gold"}'
+
         def json(self):
             return {"account_id": "AC-99", "tier": "gold"}
 
     class _Client:
         async def __aenter__(self):
             return self
+
         async def __aexit__(self, *a):
             return False
+
         async def post(self, url, json=None):
             return _Resp()
 
     from app.pipeline import flow_executor as fe
+
     monkeypatch.setattr(fe.httpx, "AsyncClient", lambda *a, **kw: _Client())
 
     cfg = AgentConfig()
@@ -538,10 +549,7 @@ async def test_api_node_merges_response_into_vars(monkeypatch):
     assert vars_bag["account_id"] == "AC-99"
     assert vars_bag["tier"] == "gold"
     # Collect prompt rendered with merged value.
-    assert any(
-        "Your account: AC-99" in (m.get("content") or "")
-        for m in pipe._messages
-    )
+    assert any("Your account: AC-99" in (m.get("content") or "") for m in pipe._messages)
     await pipe.feed_user_text("ok")
     await asyncio.wait_for(reader_task, timeout=2.0)
 

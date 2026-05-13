@@ -3,16 +3,17 @@
 Returns the data each Launch Console card needs in a single call. Cheaper than
 chatty per-card endpoints and keeps the frontend stateless about wiring.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import Principal, require_api_key
+from app.core.auth import AuthedPrincipal, require_principal
 from app.db.models import (
     Agent,
     AgentVersion,
@@ -30,15 +31,13 @@ router = APIRouter(prefix="/v1/console", tags=["console"])
 @router.get("/summary")
 async def console_summary(
     db: AsyncSession = Depends(get_db),
-    p: Principal = Depends(require_api_key),
+    p: AuthedPrincipal = Depends(require_principal),
 ) -> dict[str, Any]:
     org_id = p.org.id
 
     has_phone = bool(
         (
-            await db.execute(
-                select(PhoneNumber.id).where(PhoneNumber.org_id == org_id).limit(1)
-            )
+            await db.execute(select(PhoneNumber.id).where(PhoneNumber.org_id == org_id).limit(1))
         ).first()
     )
     has_kb = bool(
@@ -48,9 +47,7 @@ async def console_summary(
             )
         ).first()
     )
-    agents = (
-        await db.execute(select(Agent).where(Agent.org_id == org_id))
-    ).scalars().all()
+    agents = (await db.execute(select(Agent).where(Agent.org_id == org_id))).scalars().all()
     has_agent = bool(agents)
     has_published = any(a.published_version_id for a in agents)
 
@@ -59,11 +56,9 @@ async def console_summary(
     pubs: list[AgentVersion] = []
     if pub_ids:
         pubs = list(
-            (
-                await db.execute(
-                    select(AgentVersion).where(AgentVersion.id.in_(pub_ids))
-                )
-            ).scalars().all()
+            (await db.execute(select(AgentVersion).where(AgentVersion.id.in_(pub_ids))))
+            .scalars()
+            .all()
         )
     has_voice = any(bool(v.voice_id) for v in pubs) or has_agent
     has_guardrails = any(bool((v.system_prompt or "").strip()) for v in pubs)
@@ -95,8 +90,9 @@ async def console_summary(
 
     today_rows = (
         await db.execute(
-            select(Call.status, Call.duration_ms)
-            .where(Call.org_id == org_id, Call.created_at >= today_start)
+            select(Call.status, Call.duration_ms).where(
+                Call.org_id == org_id, Call.created_at >= today_start
+            )
         )
     ).all()
     today_count = len(today_rows)
@@ -151,8 +147,14 @@ async def console_summary(
     # --- launch history ----------------------------------------------------
     launches_rows = (
         await db.execute(
-            select(AgentVersion.id, AgentVersion.version, AgentVersion.env,
-                   AgentVersion.created_at, Agent.name, Agent.id)
+            select(
+                AgentVersion.id,
+                AgentVersion.version,
+                AgentVersion.env,
+                AgentVersion.created_at,
+                Agent.name,
+                Agent.id,
+            )
             .join(Agent, Agent.id == AgentVersion.agent_id)
             .where(Agent.org_id == org_id, AgentVersion.env != "draft")
             .order_by(AgentVersion.created_at.desc())
@@ -199,6 +201,145 @@ async def console_summary(
         "launch_history": launch_history,
         "score_breakdown": score_breakdown,
         "compliance": compliance,
+    }
+
+
+_ANALYTICS_RANGES = {"7d": 7, "30d": 30, "90d": 90}
+
+
+@router.get("/analytics")
+async def console_analytics(
+    range_: str = Query("7d", alias="range"),
+    db: AsyncSession = Depends(get_db),
+    p: AuthedPrincipal = Depends(require_principal),
+) -> dict[str, Any]:
+    """Aggregated call analytics for the Analytics page.
+
+    `range` query param ∈ 7d/30d/90d. Anything else falls back to 7d.
+    """
+    org_id = p.org.id
+    days = _ANALYTICS_RANGES.get(range_, 7)
+    range_key = range_ if range_ in _ANALYTICS_RANGES else "7d"
+
+    now = datetime.now(UTC)
+    since = (now - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # --- per-day volume ----------------------------------------------------
+    day_bucket = func.date_trunc("day", Call.created_at)
+    completed_status = CallStatus.completed.value
+    failed_status = CallStatus.failed.value
+
+    # Success expression: prefer the structured analysis verdict from the
+    # post-call run; fall back to status=completed when no verdict is logged.
+    # `analysis -> 'success_evaluation' ->> 'success'` materializes the inner
+    # JSON scalar as text in Postgres so we can compare it cheaply.
+    success_text = (
+        Call.analysis[("success_evaluation", "success")].astext  # type: ignore[index]
+    )
+    success_expr = case(
+        (success_text == "true", 1),
+        (success_text == "false", 0),
+        (Call.status == completed_status, 1),
+        else_=0,
+    )
+    day_rows = (
+        await db.execute(
+            select(
+                day_bucket.label("day"),
+                func.count(Call.id).label("count"),
+                func.count(Call.id).filter(Call.status == completed_status).label("completed"),
+                func.count(Call.id).filter(Call.status == failed_status).label("failed"),
+            )
+            .where(Call.org_id == org_id, Call.created_at >= since)
+            .group_by(day_bucket)
+            .order_by(day_bucket)
+        )
+    ).all()
+
+    # Fill missing days with zeros so the chart x-axis is uniform.
+    by_day_map: dict[str, dict[str, Any]] = {}
+    for r in day_rows:
+        d = r.day.date() if hasattr(r.day, "date") else r.day
+        by_day_map[d.isoformat()] = {
+            "date": d.isoformat(),
+            "count": int(r.count or 0),
+            "completed": int(r.completed or 0),
+            "failed": int(r.failed or 0),
+        }
+    volume_by_day: list[dict[str, Any]] = []
+    for i in range(days):
+        d = (since + timedelta(days=i)).date()
+        key = d.isoformat()
+        volume_by_day.append(
+            by_day_map.get(key, {"date": key, "count": 0, "completed": 0, "failed": 0})
+        )
+
+    # --- duration stats ----------------------------------------------------
+    dur_row = (
+        await db.execute(
+            select(
+                func.avg(Call.duration_ms).label("avg"),
+                func.percentile_cont(0.5).within_group(Call.duration_ms.asc()).label("p50"),
+                func.percentile_cont(0.95).within_group(Call.duration_ms.asc()).label("p95"),
+            ).where(
+                Call.org_id == org_id,
+                Call.created_at >= since,
+                Call.duration_ms.isnot(None),
+            )
+        )
+    ).one()
+    avg_duration_ms = int(dur_row.avg) if dur_row.avg else 0
+    p50_duration_ms = int(dur_row.p50) if dur_row.p50 else 0
+    p95_duration_ms = int(dur_row.p95) if dur_row.p95 else 0
+
+    # total + success use the unfiltered set (includes calls with no duration)
+    totals_row = (
+        await db.execute(
+            select(
+                func.count(Call.id).label("total"),
+                func.coalesce(func.sum(success_expr), 0).label("success_count"),
+            ).where(Call.org_id == org_id, Call.created_at >= since)
+        )
+    ).one()
+    total_calls = int(totals_row.total or 0)
+    total_success = int(totals_row.success_count or 0)
+    success_rate = (total_success / total_calls) if total_calls else 0.0
+
+    # --- per-agent breakdown ----------------------------------------------
+    agent_rows = (
+        await db.execute(
+            select(
+                Agent.id,
+                Agent.name,
+                func.count(Call.id).label("count"),
+                func.coalesce(func.sum(success_expr), 0).label("success_count"),
+            )
+            .join(Call, Call.agent_id == Agent.id)
+            .where(Agent.org_id == org_id, Call.created_at >= since)
+            .group_by(Agent.id, Agent.name)
+            .order_by(func.count(Call.id).desc())
+            .limit(10)
+        )
+    ).all()
+    by_agent = [
+        {
+            "agent_id": r.id,
+            "name": r.name,
+            "count": int(r.count or 0),
+            "success_rate": (int(r.success_count) / int(r.count) if r.count else 0.0),
+        }
+        for r in agent_rows
+    ]
+
+    return {
+        "range": range_key,
+        "volume_by_day": volume_by_day,
+        "by_agent": by_agent,
+        "total_calls": total_calls,
+        "avg_duration_ms": avg_duration_ms,
+        "p50_duration_ms": p50_duration_ms,
+        "p95_duration_ms": p95_duration_ms,
+        "success_rate": success_rate,
     }
 
 

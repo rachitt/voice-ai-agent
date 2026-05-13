@@ -1,16 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Mic, MicOff, Phone, PhoneOff, Send } from 'lucide-react'
 
-import {
-  API_BASE_KEY,
-  API_KEY_KEY,
-  api,
-  getApiBase,
-  getApiKey,
-  setApiBase,
-  setApiKey,
-  type AgentSummary,
-} from '@/lib/api'
+import { api, getApiBase, setApiBase, type AgentSummary } from '@/lib/api'
 import { WebCallClient, type WebCallEvent } from '@/lib/webcall'
 import { ApiErrorBanner } from '@/components/ApiErrorBanner'
 
@@ -20,7 +11,6 @@ export function WebCallPage() {
   const [agents, setAgents] = useState<AgentSummary[]>([])
   const [selected, setSelected] = useState<string>('')
   const [apiBase, setApiBaseLocal] = useState(getApiBase())
-  const [apiKey, setApiKeyLocal] = useState(getApiKey())
   const [status, setStatus] = useState<'idle' | 'connecting' | 'live' | 'closed'>('idle')
   const [transcript, setTranscript] = useState<TranscriptLine[]>([])
   const [textInput, setTextInput] = useState('')
@@ -30,8 +20,7 @@ export function WebCallPage() {
 
   useEffect(() => {
     setApiBase(apiBase)
-    setApiKey(apiKey)
-  }, [apiBase, apiKey])
+  }, [apiBase])
 
   async function loadAgents() {
     setErr(null)
@@ -108,23 +97,13 @@ export function WebCallPage() {
       <h1 className="mb-4 text-xl font-semibold">Web Call (browser)</h1>
 
       <section className="mb-4 rounded-md border border-border bg-panel p-4">
-        <div className="mb-3 grid grid-cols-2 gap-3">
+        <div className="mb-3 grid grid-cols-1 gap-3">
           <label className="flex flex-col gap-1 text-xs">
             <span className="text-muted">API base</span>
             <input
               className="rounded border border-border bg-panel-2 px-2 py-1.5"
               value={apiBase}
               onChange={(e) => setApiBaseLocal(e.target.value)}
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="text-muted">API key</span>
-            <input
-              type="password"
-              className="rounded border border-border bg-panel-2 px-2 py-1.5"
-              value={apiKey}
-              onChange={(e) => setApiKeyLocal(e.target.value)}
-              placeholder="sk_live_..."
             />
           </label>
         </div>
@@ -169,7 +148,7 @@ export function WebCallPage() {
         ) : (
           <button
             onClick={startCall}
-            disabled={!selected || !apiKey || status === 'connecting'}
+            disabled={!selected || status === 'connecting'}
             className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-bg hover:opacity-90 disabled:opacity-50"
           >
             <Phone className="h-4 w-4" /> Start call
@@ -238,7 +217,3 @@ function StatusPill({ status, textOnly }: { status: string; textOnly: boolean })
 }
 
 export default WebCallPage
-
-// Avoid unused — kept for callers
-void API_BASE_KEY
-void API_KEY_KEY

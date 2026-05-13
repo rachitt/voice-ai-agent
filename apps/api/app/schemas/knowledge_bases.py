@@ -31,3 +31,21 @@ class KbSourceOut(BaseModel):
     status: str
     error: str | None
     created_at: datetime
+
+
+class KbQuery(BaseModel):
+    query: str
+    top_k: int = 5
+
+
+class KbQueryHit(BaseModel):
+    chunk_id: str
+    source_id: str
+    source_name: str | None = None
+    text: str
+    score: float
+
+
+class KbQueryResult(BaseModel):
+    hits: list[KbQueryHit]
+    elapsed_ms: int = 0

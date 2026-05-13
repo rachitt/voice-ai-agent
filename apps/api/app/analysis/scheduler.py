@@ -6,6 +6,7 @@ scheduler opens a fresh DB session, runs `analyze_call`, then enqueues an
 
 Disabled by default — set `VOICE_ENABLE_POST_CALL_ANALYSIS=true` in prod.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -33,13 +34,9 @@ async def _run_safely(call_id: str) -> dict[str, Any] | None:
     settings = get_settings()
     try:
         async with SessionLocal() as db:
-            result = await analyze_call(
-                db, call_id=call_id, analysis_model=settings.analysis_model
-            )
+            result = await analyze_call(db, call_id=call_id, analysis_model=settings.analysis_model)
             # If the agent version has a server_url, enqueue analysis.completed.
-            call = (
-                await db.execute(select(Call).where(Call.id == call_id))
-            ).scalar_one_or_none()
+            call = (await db.execute(select(Call).where(Call.id == call_id))).scalar_one_or_none()
             if call and call.agent_version_id:
                 ver = await db.get(AgentVersion, call.agent_version_id)
                 if ver is not None and ver.server_url:

@@ -1,4 +1,5 @@
 """KB ingestion + retrieval. Postgres + pgvector."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -77,6 +78,5 @@ async def search(
     ).all()
 
     return [
-        Retrieval(chunk_id=r[0], source_id=r[1], text=r[2], score=float(1.0 - r[3]))
-        for r in rows
+        Retrieval(chunk_id=r[0], source_id=r[1], text=r[2], score=float(1.0 - r[3])) for r in rows
     ]

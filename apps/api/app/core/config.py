@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     enable_async_kb_ingest: bool = Field(False)
     enable_webhook_worker: bool = Field(False)
     enable_post_call_analysis: bool = Field(False)
-    analysis_model: str = Field("gemini/gemini-2.0-flash")
+    analysis_model: str = Field("gemini/gemini-3.1-flash-lite")
 
     google_oauth_client_id: str = Field("")
     google_oauth_client_secret: str = Field("")

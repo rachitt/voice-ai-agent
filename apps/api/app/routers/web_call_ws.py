@@ -14,6 +14,7 @@ Server → client:
       {"type":"started"|"user_text"|"agent_text"|"tool_call"|
               "tool_result"|"turn_end"|"error"|"stt", ...}
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -21,15 +22,16 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.logging import log
-from app.db.models import AgentVersion, Call, CallEvent, CallStatus
-from app.db.session import SessionLocal
 from app.analysis.scheduler import schedule_post_call
 from app.core.config import get_settings
+from app.core.logging import log
+from app.db.models import AgentVersion, Call, CallEvent, CallStatus, Tool
+from app.db.session import SessionLocal
 from app.pipeline import event_bus
 from app.pipeline.flow_executor import FlowExecutor, has_executable_graph
 from app.pipeline.orchestrator import AgentConfig, Pipeline, PipelineEvent, ToolCall
@@ -75,10 +77,9 @@ async def web_call_ws(
 
 # ---------------------------------------------------------------------------
 
+
 async def _load_call(db: AsyncSession, call_id: str) -> Call | None:
-    return (
-        await db.execute(select(Call).where(Call.id == call_id))
-    ).scalar_one_or_none()
+    return (await db.execute(select(Call).where(Call.id == call_id))).scalar_one_or_none()
 
 
 async def _build_agent_config(db: AsyncSession, call: Call) -> AgentConfig | None:
@@ -95,16 +96,14 @@ async def _build_agent_config(db: AsyncSession, call: Call) -> AgentConfig | Non
         ver = latest
     else:
         ver = (
-            await db.execute(
-                select(AgentVersion).where(AgentVersion.id == call.agent_version_id)
-            )
+            await db.execute(select(AgentVersion).where(AgentVersion.id == call.agent_version_id))
         ).scalar_one_or_none()
     if ver is None:
         return None
 
-    tool_defs = _resolve_tools(ver)
+    tool_defs, custom_tools = await _resolve_tools(ver, db=db, org_id=call.org_id)
 
-    return AgentConfig(
+    cfg = AgentConfig(
         model_id=ver.model_id,
         voice_id=ver.voice_id,
         system_prompt=ver.system_prompt or "",
@@ -113,12 +112,33 @@ async def _build_agent_config(db: AsyncSession, call: Call) -> AgentConfig | Non
         knowledge_base_ids=list(ver.knowledge_base_ids or []),
         flow_graph=ver.flow_graph if isinstance(ver.flow_graph, dict) else None,
     )
+    # Stash the resolved custom tools on the AgentConfig so `_run_session`
+    # can dispatch them without re-querying. AgentConfig itself stays
+    # transport-agnostic; this attribute is a private side-channel.
+    cfg._custom_tools = custom_tools  # type: ignore[attr-defined]
+    return cfg
 
 
-def _resolve_tools(ver: AgentVersion) -> list[dict]:
-    """Resolve tool refs to OpenAI tool schemas, auto-binding kb_lookup when
-    the agent has bound KBs or its flow graph references kb_lookup nodes."""
+async def _resolve_tools(
+    ver: AgentVersion, *, db: AsyncSession | None = None, org_id: str | None = None
+) -> tuple[list[dict], dict[str, Tool]]:
+    """Resolve a version's tool refs into:
+      1. A list of OpenAI tool schemas the LLM will see (`tools` arg).
+      2. A `{name: Tool}` map of *custom* (user-registered, HTTP-dispatched)
+         tools so `_run_session` can route calls back to their server_url.
+
+    Tool refs can be:
+      - A built-in name like "transfer_call" → schema lifted from REGISTRY.
+      - A custom Tool id like "tool_..." → schema synthesised from the row
+        (name + description + params_schema).
+      - A raw OpenAI tool dict — pass-through (legacy fallback).
+
+    kb_lookup is auto-bound when the agent has bound KBs or its flow graph
+    references a kb_lookup node, so editors don't have to remember to add
+    it explicitly.
+    """
     tool_defs: list[dict] = []
+    custom_tools: dict[str, Tool] = {}
     seen: set[str] = set()
 
     def _add(defn: dict) -> None:
@@ -127,17 +147,39 @@ def _resolve_tools(ver: AgentVersion) -> list[dict]:
             tool_defs.append(defn)
             seen.add(name)
 
+    # Pre-fetch any custom tool ids in one query so we don't N+1.
+    ref_strings = [t for t in (ver.tools or []) if isinstance(t, str)]
+    ref_strings += [
+        t.get("name") for t in (ver.tools or []) if isinstance(t, dict) and "name" in t and isinstance(t.get("name"), str)
+    ]
+    tool_ids = [s for s in ref_strings if s.startswith("tool_")]
+    db_rows: dict[str, Tool] = {}
+    if tool_ids and db is not None and org_id is not None:
+        rows = (
+            await db.execute(
+                select(Tool).where(Tool.org_id == org_id, Tool.id.in_(tool_ids))
+            )
+        ).scalars().all()
+        db_rows = {r.id: r for r in rows}
+
     for t in ver.tools or []:
         if isinstance(t, dict) and t.get("type") == "function":
             _add(t)
-        elif isinstance(t, dict) and "name" in t:
-            entry = REGISTRY.get(t["name"])
-            if entry:
-                _add(entry["definition"])
-        elif isinstance(t, str):
-            entry = REGISTRY.get(t)
-            if entry:
-                _add(entry["definition"])
+            continue
+        ref = t.get("name") if isinstance(t, dict) else t if isinstance(t, str) else None
+        if not ref:
+            continue
+        # 1) built-in
+        entry = REGISTRY.get(ref)
+        if entry:
+            _add(entry["definition"])
+            continue
+        # 2) custom tool row
+        row = db_rows.get(ref)
+        if row:
+            defn = _custom_tool_to_openai(row)
+            _add(defn)
+            custom_tools[row.name] = row
 
     has_kb = bool(ver.knowledge_base_ids)
     graph = ver.flow_graph or {}
@@ -152,7 +194,68 @@ def _resolve_tools(ver: AgentVersion) -> list[dict]:
         if kb_entry:
             _add(kb_entry["definition"])
 
-    return tool_defs
+    return tool_defs, custom_tools
+
+
+async def _dispatch_http_tool(
+    row: Tool, args: dict[str, Any], *, call_id: str
+) -> dict[str, Any]:
+    """POST the LLM-generated `args` to the user-configured tool endpoint
+    and return a dict the LLM can use as the tool's result. Errors are
+    coerced into a normal result so the LLM can react ("the tool failed,
+    please try again") instead of crashing the call."""
+    timeout = max(0.5, (row.timeout_ms or 10000) / 1000.0)
+    headers = {"content-type": "application/json", **(row.headers or {})}
+    # Stamp the active call so user backends can correlate logs.
+    headers.setdefault("X-Voice-Call-Id", call_id)
+    method = (row.method or "POST").upper()
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            r = await client.request(
+                method,
+                row.server_url,
+                json=args if method != "GET" else None,
+                params=args if method == "GET" else None,
+                headers=headers,
+            )
+        body: Any
+        try:
+            body = r.json()
+        except Exception:
+            body = (r.text or "")[:2000]
+        if not 200 <= r.status_code < 300:
+            log.warning(
+                "tool.http.bad_status",
+                tool=row.name,
+                status=r.status_code,
+                url=row.server_url,
+            )
+            return {"error": "http_error", "status": r.status_code, "body": body}
+        return {"ok": True, "result": body}
+    except httpx.TimeoutException:
+        log.warning("tool.http.timeout", tool=row.name, url=row.server_url, timeout_s=timeout)
+        return {"error": "timeout", "timeout_s": timeout}
+    except Exception as exc:
+        log.exception("tool.http.err", tool=row.name, err=str(exc))
+        return {"error": "transport_error", "detail": str(exc)}
+
+
+def _custom_tool_to_openai(row: Tool) -> dict:
+    """Translate a DB Tool row into the OpenAI function-tool schema the LLM
+    consumes. `params_schema` is trusted to already be a JSON Schema; if it
+    isn't an object, fall back to a permissive empty schema so the LLM at
+    least sees the tool by name."""
+    params = row.params_schema if isinstance(row.params_schema, dict) else {}
+    if "type" not in params:
+        params = {"type": "object", "properties": params or {}}
+    return {
+        "type": "function",
+        "function": {
+            "name": row.name,
+            "description": row.description or f"Custom tool: {row.name}",
+            "parameters": params,
+        },
+    }
 
 
 async def _run_session(
@@ -163,23 +266,34 @@ async def _run_session(
     *,
     text_only: bool,
 ) -> None:
+    custom_tools: dict[str, Tool] = getattr(cfg, "_custom_tools", {}) or {}
+
     async def tool_dispatch(tc: ToolCall) -> dict[str, Any]:
+        # 1. Built-in (transfer_call, kb_lookup, …) — runs in-process.
         entry = REGISTRY.get(tc.name)
-        if not entry:
-            return {"error": "unknown_tool", "name": tc.name}
-        ctx = ToolContext(
-            call=call,
-            db=db,
-            telnyx=None,
-            args=tc.arguments,
-            knowledge_base_ids=list(cfg.knowledge_base_ids or []),
-            embedding_model=cfg.embedding_model,
-        )
-        try:
-            return await entry["handler"](ctx)
-        except Exception as exc:
-            log.exception("ws.tool.error", name=tc.name, err=str(exc))
-            return {"error": "tool_failed", "detail": str(exc)}
+        if entry:
+            ctx = ToolContext(
+                call=call,
+                db=db,
+                telnyx=None,
+                args=tc.arguments,
+                knowledge_base_ids=list(cfg.knowledge_base_ids or []),
+                embedding_model=cfg.embedding_model,
+            )
+            try:
+                return await entry["handler"](ctx)
+            except Exception as exc:
+                log.exception("ws.tool.error", name=tc.name, err=str(exc))
+                return {"error": "tool_failed", "detail": str(exc)}
+
+        # 2. Custom HTTP tool (calendar, CRM, etc.) — POST to server_url
+        #    with the LLM-produced arguments. This is the path that makes
+        #    a "create_calendar_event" tool actually call your service.
+        row = custom_tools.get(tc.name)
+        if row:
+            return await _dispatch_http_tool(row, tc.arguments, call_id=call.id)
+
+        return {"error": "unknown_tool", "name": tc.name}
 
     pipe = Pipeline(cfg, tool_dispatch=tool_dispatch)
     recorder = CallRecorder(sample_rate=cfg.sample_rate)
@@ -198,18 +312,21 @@ async def _run_session(
             stt_stream = None
 
         if stt_stream is not None:
+
             async def _stt_pump() -> None:
                 buf = ""
                 assert stt_stream is not None
                 async for ev in stt_stream.events():
                     if ev.text:
                         buf = ev.text if ev.is_final else buf
-                        await ws.send_json({
-                            "type": "stt",
-                            "text": ev.text,
-                            "is_final": ev.is_final,
-                            "speech_final": ev.speech_final,
-                        })
+                        await ws.send_json(
+                            {
+                                "type": "stt",
+                                "text": ev.text,
+                                "is_final": ev.is_final,
+                                "speech_final": ev.speech_final,
+                            }
+                        )
                     if ev.speech_final and buf:
                         await pipe.feed_user_text(buf, is_final=True)
                         transcript_log.append({"role": "user", "text": buf})
@@ -230,7 +347,9 @@ async def _run_session(
         if not entry:
             return {"error": "kb_lookup_unavailable"}
         ctx = ToolContext(
-            call=call, db=db, telnyx=None,
+            call=call,
+            db=db,
+            telnyx=None,
             args={"kb_id": kb_id, "query": query, "top_k": top_k},
             knowledge_base_ids=list(cfg.knowledge_base_ids or []),
             embedding_model=cfg.embedding_model,
@@ -358,7 +477,9 @@ async def _finalise_call(db: AsyncSession, call: Call, transcript: list[dict]) -
         if call.started_at:
             call.duration_ms = int((now - call.started_at).total_seconds() * 1000)
         call.transcript = transcript or call.transcript
-        db.add(CallEvent(call_id=call.id, at=now, kind="ws.closed", payload={"turns": len(transcript)}))
+        db.add(
+            CallEvent(call_id=call.id, at=now, kind="ws.closed", payload={"turns": len(transcript)})
+        )
         await db.commit()
     except Exception as exc:
         log.warning("ws.finalise.error", err=str(exc))

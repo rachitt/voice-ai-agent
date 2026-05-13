@@ -68,7 +68,18 @@ export class WebCallClient {
 
   private resolveUrl(p: string, apiBase: string): string {
     if (p.startsWith('ws://') || p.startsWith('wss://')) return p
-    const base = apiBase.replace(/^http/, 'ws')
+    // WS authentication is already covered by the HMAC `ws_token` query
+    // param the server minted, so the WebSocket itself doesn't need the
+    // session cookie. That lets it bypass the vite dev proxy (whose WS
+    // upgrade path EPIPEs under Vite 8) and connect direct to the API.
+    //
+    // In prod the build constant resolves to the same origin as the page,
+    // so this still works without a separate WS host.
+    const origin =
+      typeof __VITE_API_ORIGIN__ === 'string' && __VITE_API_ORIGIN__
+        ? __VITE_API_ORIGIN__
+        : apiBase || `${window.location.protocol}//${window.location.host}`
+    const base = origin.replace(/^http/, 'ws')
     return `${base}${p}`
   }
 
@@ -94,6 +105,14 @@ export class WebCallClient {
   sendUserText(text: string, isFinal = true): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
     this.ws.send(JSON.stringify({ type: 'user_text', text, is_final: isFinal }))
+  }
+
+  /** Mute the mic without tearing down the WS. Disabled tracks emit silence
+   *  but keep the AudioWorklet alive, so unmuting resumes instantly without
+   *  a new permission prompt. */
+  setMicMuted(muted: boolean): void {
+    if (!this.micStream) return
+    for (const track of this.micStream.getAudioTracks()) track.enabled = !muted
   }
 
   /** Schedule one PCM chunk (Int16 LE @ 16 kHz mono) for playback. */

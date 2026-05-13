@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test'
 import type { BuilderHandle, BuilderEdge } from './_builder-handle'
+import { mockAuthed } from './_auth'
 
 test.describe('Agent Builder', () => {
   test.beforeEach(async ({ page }) => {
+    await mockAuthed(page)
     await page.goto('/builder/demo')
     await expect(page.getByTestId('builder-root')).toBeVisible()
   })
