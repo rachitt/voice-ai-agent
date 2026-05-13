@@ -62,6 +62,8 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
 const REAL_KINDS = new Set([
   'greeting',
   'collect',
+  'slot_fill',
+  'tool_call',
   'api',
   'condition',
   'transfer',
