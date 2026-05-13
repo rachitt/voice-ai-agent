@@ -408,11 +408,12 @@ async def _run_session(
             stt_pusher_task.cancel()
         if stt_stream:
             await stt_stream.close()
+        tts_stats = getattr(pipe, "tts_stats", None)
         await pipe.close()
         drainer.cancel()
         event_bus.close(call.id)
         await _upload_recording(call, recorder)
-        await _finalise_call(db, call, transcript_log)
+        await _finalise_call(db, call, transcript_log, tts_stats=tts_stats)
         schedule_post_call(call.id)
         try:
             await ws.close()
@@ -468,7 +469,13 @@ async def _upload_recording(call: Call, recorder: CallRecorder) -> None:
         call.recording_s3_key = stored
 
 
-async def _finalise_call(db: AsyncSession, call: Call, transcript: list[dict]) -> None:
+async def _finalise_call(
+    db: AsyncSession,
+    call: Call,
+    transcript: list[dict],
+    *,
+    tts_stats: dict[str, int] | None = None,
+) -> None:
     try:
         now = datetime.now(UTC)
         if call.status != CallStatus.completed:
@@ -477,8 +484,26 @@ async def _finalise_call(db: AsyncSession, call: Call, transcript: list[dict]) -
         if call.started_at:
             call.duration_ms = int((now - call.started_at).total_seconds() * 1000)
         call.transcript = transcript or call.transcript
+        if tts_stats:
+            # Stash on dynamic_variables so analytics/dashboard can read it
+            # without a schema migration. Empty stats (no turns) are skipped.
+            new_vars = dict(call.dynamic_variables or {})
+            new_vars["tts_cache"] = tts_stats
+            call.dynamic_variables = new_vars
+            log.info(
+                "ws.tts_cache.summary",
+                call=call.id,
+                hits=tts_stats.get("hits", 0),
+                misses=tts_stats.get("misses", 0),
+                miss_chars=tts_stats.get("miss_chars", 0),
+            )
         db.add(
-            CallEvent(call_id=call.id, at=now, kind="ws.closed", payload={"turns": len(transcript)})
+            CallEvent(
+                call_id=call.id,
+                at=now,
+                kind="ws.closed",
+                payload={"turns": len(transcript), "tts_cache": tts_stats or {}},
+            )
         )
         await db.commit()
     except Exception as exc:

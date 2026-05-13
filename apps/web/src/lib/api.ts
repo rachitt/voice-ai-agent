@@ -38,10 +38,27 @@ export class ApiError extends Error {
   }
 }
 
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+// Double-submit CSRF: read the non-httpOnly voice_csrf cookie set on
+// session mint and echo it back as a header on writes. The middleware
+// rejects writes when header ≠ cookie, so a same-site attacker can't
+// forge a POST against a victim's session without also being able to
+// set the header (which cross-site code cannot).
+function readCsrfCookie(): string | null {
+  const match = document.cookie.match(/(?:^|;\s*)voice_csrf=([^;]+)/)
+  return match ? decodeURIComponent(match[1]) : null
+}
+
 async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers || {})
   if (init.body && !headers.has('content-type')) {
     headers.set('content-type', 'application/json')
+  }
+  const method = (init.method || 'GET').toUpperCase()
+  if (!SAFE_METHODS.has(method) && !headers.has('x-csrf-token')) {
+    const tok = readCsrfCookie()
+    if (tok) headers.set('x-csrf-token', tok)
   }
   const res = await fetch(`${getApiBase()}${path}`, {
     ...init,
@@ -505,6 +522,8 @@ export interface StreamToken {
 export interface MeResponse {
   user: { id: string; email: string; name: string | null; avatar_url: string | null }
   org: { id: string; name: string; slug: string } | null
+  /** Double-submit CSRF token — also set as voice_csrf cookie. */
+  csrf_token?: string
 }
 
 export const auth = {

@@ -37,6 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
 from app.core.config import get_settings
+from app.core.csrf import CSRF_COOKIE, new_csrf_token, set_csrf_cookie
 from app.core.logging import log
 from app.core.security import hash_api_key
 from app.core.sessions import mint_session, verify_session
@@ -161,6 +162,7 @@ async def callback_google(
         secure=_secure_cookie(),
         path="/",
     )
+    set_csrf_cookie(resp, new_csrf_token(), secure=_secure_cookie())
     resp.delete_cookie(STATE_COOKIE, path="/")
     return resp
 
@@ -168,6 +170,7 @@ async def callback_google(
 @router.get("/me")
 async def me(
     request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     s = get_settings()
@@ -181,6 +184,13 @@ async def me(
     if not user:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user gone")
     org = await db.get(Org, user.org_id)
+
+    # Ensure a CSRF cookie exists for older sessions that pre-date the
+    # CSRF rollout. Mint on the fly + echo via the response body.
+    csrf = request.cookies.get(CSRF_COOKIE)
+    if not csrf:
+        csrf = new_csrf_token()
+        set_csrf_cookie(response, csrf, secure=_secure_cookie())
     return {
         "user": {
             "id": user.id,
@@ -189,6 +199,7 @@ async def me(
             "avatar_url": user.avatar_url,
         },
         "org": {"id": org.id, "name": org.name, "slug": org.slug} if org else None,
+        "csrf_token": csrf,
     }
 
 
@@ -202,6 +213,7 @@ async def logout(response: Response) -> dict[str, bool]:
         httponly=True,
         samesite="lax",
     )
+    response.delete_cookie(CSRF_COOKIE, path="/", samesite="lax")
     return {"ok": True}
 
 
@@ -272,9 +284,12 @@ async def exchange_api_key_for_session(
         secure=_secure_cookie(),
         path="/",
     )
+    csrf = new_csrf_token()
+    set_csrf_cookie(response, csrf, secure=_secure_cookie())
     return {
         "user": {"id": user.id, "email": user.email, "name": user.name},
         "org": {"id": org.id, "name": org.name, "slug": org.slug},
+        "csrf_token": csrf,
     }
 
 

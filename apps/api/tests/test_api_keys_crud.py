@@ -18,7 +18,14 @@ async def session_user(db_session):
     db_session.add(user)
     await db_session.commit()
     token = mint_session(user.id, org.id)
-    return {"user": user, "org": org, "cookie": {"voice_session": token}}
+    # Double-submit CSRF: cookie value mirrored as header on writes.
+    csrf = "test-csrf-" + token[-8:]
+    return {
+        "user": user,
+        "org": org,
+        "cookie": {"voice_session": token, "voice_csrf": csrf},
+        "csrf_headers": {"x-csrf-token": csrf},
+    }
 
 
 @pytest.mark.asyncio
@@ -27,6 +34,7 @@ async def test_create_returns_raw_key_once(client, session_user):
         "/v1/api-keys",
         json={"name": "dev laptop"},
         cookies=session_user["cookie"],
+        headers=session_user["csrf_headers"],
     )
     assert r.status_code == 201, r.text
     body = r.json()
@@ -38,7 +46,12 @@ async def test_create_returns_raw_key_once(client, session_user):
 
 @pytest.mark.asyncio
 async def test_list_does_not_leak_key(client, session_user):
-    await client.post("/v1/api-keys", json={"name": "k1"}, cookies=session_user["cookie"])
+    await client.post(
+        "/v1/api-keys",
+        json={"name": "k1"},
+        cookies=session_user["cookie"],
+        headers=session_user["csrf_headers"],
+    )
     r = await client.get("/v1/api-keys", cookies=session_user["cookie"])
     assert r.status_code == 200
     rows = r.json()
@@ -51,7 +64,10 @@ async def test_list_does_not_leak_key(client, session_user):
 @pytest.mark.asyncio
 async def test_revoke_blocks_subsequent_use(client, session_user, db_session):
     r = await client.post(
-        "/v1/api-keys", json={"name": "to-revoke"}, cookies=session_user["cookie"]
+        "/v1/api-keys",
+        json={"name": "to-revoke"},
+        cookies=session_user["cookie"],
+        headers=session_user["csrf_headers"],
     )
     body = r.json()
     raw = body["key"]
@@ -61,7 +77,11 @@ async def test_revoke_blocks_subsequent_use(client, session_user, db_session):
     r = await client.get("/v1/agents", headers={"Authorization": f"Bearer {raw}"})
     assert r.status_code == 200
 
-    r = await client.delete(f"/v1/api-keys/{key_id}", cookies=session_user["cookie"])
+    r = await client.delete(
+        f"/v1/api-keys/{key_id}",
+        cookies=session_user["cookie"],
+        headers=session_user["csrf_headers"],
+    )
     assert r.status_code == 204
 
     # Reload to confirm soft-revocation.

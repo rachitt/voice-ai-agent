@@ -2,34 +2,31 @@
 
 ## Last session
 
-Production-grade auth refactor: dropped `localStorage` API-key reads,
-added `POST /v1/auth/session/api-key` exchange → httpOnly cookie, new
-`require_principal` accepts session OR Bearer on all 8 data routers,
-unified `/signin` page (Google + API key), `AuthGate` redirects unauthed
-users. Vite same-origin proxy for HTTP, WS bypasses proxy via
-`__VITE_API_ORIGIN__`. TestCallModal → bottom-right floating widget,
-voice-orb UI, mute, `flow_node` events highlight active node on canvas.
-Real STT→Gemini→ElevenLabs round-trip verified. Fixed bogus defaults
-(`voice_id` was a TTS model id; `model_id` was bare → Vertex AI route).
-Silent TTS failure now surfaces yellow banner via `tts_error` event.
-Redis-backed TTS PCM cache wired in `Pipeline._speak` (30d TTL).
-Custom DB tools now dispatched: `_resolve_tools` + `_dispatch_http_tool`
-on both web-call + Telnyx paths — calendar/CRM tools finally callable.
-397/397 pytest, 29/29 vitest, 53/53 e2e.
+Shipped 6-item queue from prior session: custom tool round-trip test
+suite (`test_custom_tool_roundtrip.py`) + httpbin smoke script; Google
+Calendar `book_meeting` builtin via service-account JWT auth +
+`_dispatch_http_tool` parity on web/Telnyx paths; double-submit-cookie
+CSRF middleware (mints `voice_csrf` alongside session, web client copies
+to `X-CSRF-Token` on writes, Bearer/webhook/login exempt); split
+`session_secret` from `webhook_hmac_secret` w/ backwards-compat fallback;
+per-call TTS cache stats (`hits/misses/miss_chars` on Pipeline, persisted
+to `call.dynamic_variables["tts_cache"]`); fixed real bug where
+`TtsProviderError` cached partial waveform; coverage 93→95.06%, gate bumped
+to 95. 470/470 pytest, 29/29 vitest, web build clean.
 
 ## For next session
 
-1. **Verify custom tool round-trip live**: register a real `httpbin.org`
-   tool via UI, bind to agent, voice-call it, assert HTTP POST fires and
-   response lands as `tool_result` in transcript.
-2. **Calendar adapter**: thin POST wrapper around Google Calendar API
-   (service-account auth). Register as a tool: `book_meeting` taking
-   `{title, start_iso, attendee_email}`.
-3. **CSRF hardening**: SameSite=Lax covers cross-site but not same-site.
-   Add double-submit cookie token on POST endpoints.
-4. **Split session secret from `webhook_hmac_secret`** so rotation is
-   independent.
-5. **TTS-cache hit-rate metric**: log per-call `{cache_hits, miss_chars}`
-   so we can see credit savings empirically.
-6. **Bump `--cov-fail-under` 94 → 95** after the orchestrator/web_call_ws
-   cold-spot sweep planned earlier still pending.
+1. **Live calendar smoke**: provision a real SA against a test calendar,
+   run `book_meeting` via the test-call modal, confirm an event lands.
+2. **CSRF in OAuth flow**: the dashboard reads `voice_csrf` cookie via
+   JS today; verify it survives a real Google OAuth round-trip in the
+   browser (cookie is set on the 302 from `/callback/google`).
+3. **TTS-cache stats dashboard**: surface per-org rollups in the console
+   UI — `sum(miss_chars) * elevenlabs_rate_per_char = $saved`.
+4. **Mypy + ruff cleanup**: 56 pre-existing mypy errors, 37 ruff. Decide
+   whether to bite the bullet and gate either, or keep them advisory.
+5. **Async KB ingest worker**: the path is now covered by tests but the
+   worker queue itself is still bare-bones — add retry/backoff for
+   transient embedding-provider failures.
+6. **Custom-tool UI polish**: builder still lacks a "test this tool"
+   button that fires the HTTP request out-of-band before binding.

@@ -14,16 +14,6 @@ from app.db.session import get_db
 
 
 @dataclass
-class Principal:
-    """Bearer-API-key principal. Used by external SDK callers."""
-
-    org: Org
-    api_key: ApiKey
-    user: None = None
-    method: Literal["api_key"] = "api_key"
-
-
-@dataclass
 class SessionPrincipal:
     """Cookie-session principal. Used by dashboard browser users."""
 
@@ -49,35 +39,6 @@ class AuthedPrincipal:
     user: User | None
     api_key: ApiKey | None
     method: Literal["session", "api_key"]
-
-
-async def require_api_key(
-    authorization: str | None = Header(default=None),
-    db: AsyncSession = Depends(get_db),
-) -> Principal:
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "missing bearer token")
-    raw = authorization.split(" ", 1)[1].strip()
-    if not raw:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "empty bearer token")
-
-    key_hash = hash_api_key(raw)
-    row = (
-        await db.execute(
-            select(ApiKey, Org)
-            .join(Org, Org.id == ApiKey.org_id)
-            .where(ApiKey.key_hash == key_hash, ApiKey.revoked_at.is_(None))
-        )
-    ).first()
-    if not row:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid api key")
-
-    api_key, org = row
-    await db.execute(
-        update(ApiKey).where(ApiKey.id == api_key.id).values(last_used_at=datetime.now(UTC))
-    )
-    await db.commit()
-    return Principal(org=org, api_key=api_key)
 
 
 async def require_session(

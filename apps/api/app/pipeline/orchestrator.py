@@ -266,6 +266,14 @@ class Pipeline:
         # Marker for the per-step system note so FlowExecutor can replace it
         # without leaking earlier step intent into later turns.
         self._STEP_MARKER = "__flow_step__"
+        # Per-call TTS cache stats — used downstream by webcall/Telnyx routers
+        # to log credit savings ({hits, misses, miss_chars}) once the call ends.
+        self._tts_stats: dict[str, int] = {"hits": 0, "misses": 0, "miss_chars": 0}
+
+    @property
+    def tts_stats(self) -> dict[str, int]:
+        """Snapshot of TTS cache stats for this pipeline. Read-only."""
+        return dict(self._tts_stats)
 
     async def _default_llm(self, **kw):
         async for e in litellm_turn(
@@ -484,12 +492,15 @@ class Pipeline:
             text=text,
         )
         if cached:
+            self._tts_stats["hits"] += 1
             for i in range(0, len(cached), FRAME_BYTES):
                 await self._out.put(
                     PipelineEvent(kind="agent_audio", audio=cached[i : i + FRAME_BYTES])
                 )
             return
 
+        self._tts_stats["misses"] += 1
+        self._tts_stats["miss_chars"] += len(text)
         accumulated = bytearray()
         try:
             async for frame in self._tts(text):
@@ -505,6 +516,9 @@ class Pipeline:
             await self._out.put(
                 PipelineEvent(kind="tts_error", data={"err": str(exc)})
             )
+            # Don't cache a partial waveform — would replay a truncated greeting
+            # forever once the provider recovers.
+            return
         except Exception as exc:
             log.exception("pipeline.tts.error", err=str(exc))
             await self._out.put(PipelineEvent(kind="error", data={"err": f"tts:{exc}"}))

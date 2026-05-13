@@ -210,11 +210,12 @@ async def _run_pstn_session(ws: WebSocket, db: AsyncSession, call: Call, cfg: Ag
             stt_task.cancel()
         if stt is not None:
             await stt.close()
+        tts_stats = getattr(pipe, "tts_stats", None)
         await pipe.close()
         drainer.cancel()
         event_bus.close(call.id)
         await _upload_recording(call, recorder)
-        await _finalise(db, call, transcript_log)
+        await _finalise(db, call, transcript_log, tts_stats=tts_stats)
         schedule_post_call(call.id)
         await telnyx.aclose()
         try:
@@ -278,16 +279,36 @@ async def _upload_recording(call: Call, recorder: CallRecorder) -> None:
         call.recording_s3_key = stored
 
 
-async def _finalise(db: AsyncSession, call: Call, transcript: list[dict]) -> None:
+async def _finalise(
+    db: AsyncSession,
+    call: Call,
+    transcript: list[dict],
+    *,
+    tts_stats: dict[str, int] | None = None,
+) -> None:
     now = datetime.now(UTC)
     call.status = CallStatus.completed
     call.ended_at = now
     if call.started_at:
         call.duration_ms = int((now - call.started_at).total_seconds() * 1000)
     call.transcript = transcript or call.transcript
+    if tts_stats:
+        new_vars = dict(call.dynamic_variables or {})
+        new_vars["tts_cache"] = tts_stats
+        call.dynamic_variables = new_vars
+        log.info(
+            "telnyx.tts_cache.summary",
+            call=call.id,
+            hits=tts_stats.get("hits", 0),
+            misses=tts_stats.get("misses", 0),
+            miss_chars=tts_stats.get("miss_chars", 0),
+        )
     db.add(
         CallEvent(
-            call_id=call.id, at=now, kind="telnyx.media.closed", payload={"turns": len(transcript)}
+            call_id=call.id,
+            at=now,
+            kind="telnyx.media.closed",
+            payload={"turns": len(transcript), "tts_cache": tts_stats or {}},
         )
     )
     await db.commit()
