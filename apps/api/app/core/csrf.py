@@ -46,6 +46,9 @@ CSRF_EXEMPT_PREFIXES: tuple[str, ...] = (
     "/v1/auth/callback/",
     "/v1/auth/session/api-key",
     "/v1/auth/logout",
+    # OAuth callbacks come from Google with no CSRF token; state cookie
+    # serves the equivalent role for this path.
+    "/v1/integrations/google/calendar/callback",
     "/v1/webhooks/",
     "/v1/telephony/",
     "/healthz",

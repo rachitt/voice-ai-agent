@@ -168,12 +168,16 @@ async def _kb_lookup(ctx: ToolContext) -> dict[str, Any]:
 
 
 async def _book_meeting(ctx: ToolContext) -> dict[str, Any]:
-    """Book a calendar event via the configured Google service account.
+    """Book a calendar event.
+
+    Resolution order:
+      1. Per-org OAuth integration (user connected via /settings/integrations)
+      2. Env-configured service account (headless / fallback)
 
     Args (LLM-supplied): title, start_iso, attendee_email, duration_min?, description?
     Returns: {event_id, html_link, start, end} on success; {error: ...} otherwise.
     """
-    from app.tools.calendar import book_event
+    from app.tools.calendar import book_event, book_event_for_org
 
     args = ctx.args or {}
     title = (args.get("title") or "").strip()
@@ -182,13 +186,18 @@ async def _book_meeting(ctx: ToolContext) -> dict[str, Any]:
         return {"error": "missing_title"}
     if not start_iso:
         return {"error": "missing_start_iso"}
-    return await book_event(
-        title=title,
-        start_iso=start_iso,
-        attendee_email=(args.get("attendee_email") or None),
-        duration_min=(args.get("duration_min") or None),
-        description=(args.get("description") or None),
-    )
+    common = {
+        "title": title,
+        "start_iso": start_iso,
+        "attendee_email": (args.get("attendee_email") or None),
+        "duration_min": (args.get("duration_min") or None),
+        "description": (args.get("description") or None),
+    }
+    # Live-call path: ctx.call carries org_id → use per-org OAuth integration.
+    # Headless / test path: no call attached → fall back to SA-from-env.
+    if ctx.call is not None and ctx.db is not None:
+        return await book_event_for_org(db=ctx.db, org_id=ctx.call.org_id, **common)
+    return await book_event(**common)
 
 
 async def _extract_data(ctx: ToolContext) -> dict[str, Any]:

@@ -519,6 +519,20 @@ export interface StreamToken {
 
 // --- auth ------------------------------------------------------------------
 
+export interface IntegrationStatus {
+  connected: boolean
+  account_email?: string
+  scopes?: string[]
+  connected_at?: string
+}
+
+export const integrations = {
+  googleCalendarStatus: () =>
+    req<IntegrationStatus>('/v1/integrations/google/calendar/status'),
+  disconnectGoogleCalendar: () =>
+    req<null>('/v1/integrations/google/calendar', { method: 'DELETE' }),
+}
+
 export interface MeResponse {
   user: { id: string; email: string; name: string | null; avatar_url: string | null }
   org: { id: string; name: string; slug: string } | null

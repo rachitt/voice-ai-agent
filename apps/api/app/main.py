@@ -13,6 +13,7 @@ from app.routers import (
     calls,
     catalog,
     console,
+    integrations,
     knowledge_bases,
     phone_numbers,
     squads,
@@ -63,6 +64,7 @@ def create_app() -> FastAPI:
     app.include_router(api_keys.router)
     app.include_router(console.router)
     app.include_router(catalog.router)
+    app.include_router(integrations.router)
 
     return app
 

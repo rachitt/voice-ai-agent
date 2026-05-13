@@ -145,6 +145,30 @@ class PhoneNumber(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(32), default="active", nullable=False)
 
 
+class OAuthIntegration(Base, TimestampMixin):
+    """Per-org OAuth refresh tokens for third-party services (calendar, CRM, etc.).
+
+    Stored per org so a single workspace's agents share a calendar connection
+    without each user having to re-grant access. `refresh_token` is long-lived;
+    `access_token` is a cache populated by the adapter and refreshed on demand.
+    """
+
+    __tablename__ = "oauth_integrations"
+    id: Mapped[str] = mapped_column(String(48), primary_key=True, default=lambda: _id("oint"))
+    org_id: Mapped[str] = mapped_column(
+        ForeignKey("orgs.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    account_email: Mapped[str | None] = mapped_column(String(240))
+    refresh_token: Mapped[str] = mapped_column(Text, nullable=False)
+    access_token: Mapped[str | None] = mapped_column(Text)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    scopes: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    __table_args__ = (
+        UniqueConstraint("org_id", "provider", name="uq_oauth_integrations_org_provider"),
+    )
+
+
 class KnowledgeBase(Base, TimestampMixin):
     __tablename__ = "knowledge_bases"
     id: Mapped[str] = mapped_column(String(48), primary_key=True, default=lambda: _id("kb"))
