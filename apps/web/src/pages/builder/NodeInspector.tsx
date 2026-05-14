@@ -5,7 +5,7 @@ import { RULES } from './connection-rules'
 import { KIND_ICON, KIND_TINT } from './icons'
 import { cn } from '@/lib/cn'
 import { catalog, type CatalogModel, type CatalogVoice } from '@/lib/api'
-import type { RetryPolicy, SlotSpec, StepData } from './types'
+import type { SlotSpec, StepData } from './types'
 
 const MODEL_FALLBACK: CatalogModel[] = [
   { id: 'gemini/gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite', vendor: 'google', tier: 'fast' },
@@ -17,6 +17,27 @@ const VOICE_FALLBACK: CatalogVoice[] = [
 
 const TAB_KEYS = ['Settings', 'Transitions'] as const
 type Tab = (typeof TAB_KEYS)[number]
+
+// Node kinds that use the shared `prompt` textarea. Everything else has
+// kind-specific fields (slots, tool, webhook, kb_id) and the generic
+// prompt would be misleading.
+const PROMPT_KINDS = new Set<StepData['kind']>([
+  'greeting',
+  'collect',
+  'slot_fill',
+  'condition',
+  'transfer',
+  'voicemail',
+])
+
+const PROMPT_PLACEHOLDERS: Record<string, string> = {
+  greeting: 'First thing the agent says, e.g. "Hi! I can book a demo. When works for you?"',
+  collect: 'What should the agent gather here? e.g. "Ask for their email."',
+  slot_fill: 'Context for why we\'re collecting these (optional)',
+  condition: 'How should the agent decide? e.g. "Did the user say yes?"',
+  transfer: 'Short context for the human picking up the call',
+  voicemail: 'Message to leave, e.g. "Sorry we missed you. Call back at …"',
+}
 
 export function NodeInspector() {
   const node = useBuilder((s) => s.nodes.find((n) => n.id === s.selectedId)) ?? null
@@ -74,7 +95,8 @@ export function NodeInspector() {
 
       <Tabs />
 
-      <div className="min-h-0 flex-1 space-y-4 overflow-auto px-4 py-4">
+      <div className="min-h-0 flex-1 space-y-5 overflow-auto px-4 py-4">
+        {/* --- 1. Identity ----------------------------------------------- */}
         <Field label="Title">
           <input
             data-testid="title-input"
@@ -85,6 +107,7 @@ export function NodeInspector() {
           />
         </Field>
 
+        {/* --- 2. Connections summary ----------------------------------- */}
         <Field label="Connections">
           <div
             data-testid="conn-summary"
@@ -111,37 +134,30 @@ export function NodeInspector() {
           )}
         </Field>
 
-        <Field label="Voice">
-          <Select
-            value={node.data.voice ?? 'Aria Power'}
-            onChange={(v) => set({ voice: v })}
-            options={['Aria Power', 'Atlas Calm', 'Nova Bright', 'Lyra Soft']}
-          />
-        </Field>
-
-        <Field label="Mode">
-          <Select
-            value={node.data.mode ?? 'Normal'}
-            onChange={(v) => set({ mode: v as StepData['mode'] })}
-            options={['Normal', 'Strict', 'Creative']}
-          />
-        </Field>
-
-        {node.data.kind !== 'tool_call' && (
-          <Field label={node.data.kind === 'slot_fill' ? 'Intent (optional)' : 'Prompt'}>
+        {/* --- 3. Kind-specific config (the heart of the inspector) ----- */}
+        {node.data.kind !== 'tool_call' && PROMPT_KINDS.has(node.data.kind) && (
+          <Field
+            label={
+              node.data.kind === 'greeting'
+                ? 'What the agent says first'
+                : node.data.kind === 'slot_fill'
+                  ? 'Why are we collecting this? (optional)'
+                  : node.data.kind === 'condition'
+                    ? 'Decision criterion'
+                    : node.data.kind === 'transfer'
+                      ? 'Hand-off summary for the human'
+                      : node.data.kind === 'voicemail'
+                        ? 'Voicemail message'
+                        : 'Prompt'
+            }
+          >
             <textarea
-              rows={node.data.kind === 'slot_fill' ? 2 : 4}
+              rows={node.data.kind === 'greeting' ? 4 : 3}
               data-testid="prompt-input"
               className={inputCls}
               value={node.data.prompt ?? ''}
               onChange={(e) => set({ prompt: e.target.value, subtitle: e.target.value })}
-              placeholder={
-                node.data.kind === 'greeting'
-                  ? 'First thing the agent says, e.g. "Hi! I can book a demo…"'
-                  : node.data.kind === 'slot_fill'
-                    ? 'Context for why we\'re collecting these (optional)'
-                    : "What's your voice agent's job here?"
-              }
+              placeholder={PROMPT_PLACEHOLDERS[node.data.kind] ?? ''}
             />
           </Field>
         )}
@@ -159,16 +175,16 @@ export function NodeInspector() {
 
         {node.data.kind === 'kb_lookup' && (
           <>
-            <Field label="Knowledge base ID" hint="Defaults to first bound KB">
+            <Field label="Knowledge base" hint="Leave empty to use first bound KB">
               <input
                 data-testid="kb-id-input"
-                className={inputCls}
+                className={cn(inputCls, 'font-mono')}
                 value={node.data.kb_id ?? ''}
                 onChange={(e) => set({ kb_id: e.target.value })}
                 placeholder="kb_abc123"
               />
             </Field>
-            <Field label="Query template" hint="Liquid-style {{variables}} OK">
+            <Field label="Search query" hint="Use {{variables}} from earlier slots">
               <textarea
                 rows={2}
                 data-testid="kb-query-input"
@@ -178,7 +194,7 @@ export function NodeInspector() {
                 placeholder="What does the caller want to know about {{topic}}?"
               />
             </Field>
-            <Field label="Top K" hint="1–20">
+            <Field label="Max results" hint="1–20">
               <input
                 type="number"
                 min={1}
@@ -186,55 +202,38 @@ export function NodeInspector() {
                 data-testid="kb-topk-input"
                 className={inputCls}
                 value={node.data.top_k ?? 5}
-                onChange={(e) => set({ top_k: Math.max(1, Math.min(20, Number(e.target.value) || 5)) })}
+                onChange={(e) =>
+                  set({ top_k: Math.max(1, Math.min(20, Number(e.target.value) || 5)) })
+                }
               />
             </Field>
           </>
         )}
 
-        <Field label="Interruption handling" hint="Allow caller to interrupt mid-utterance">
-          <Select
-            value={node.data.interruption ?? 'allow'}
-            onChange={(v) => set({ interruption: v as StepData['interruption'] })}
-            options={['allow', 'block', 'soft']}
-          />
-        </Field>
+        {(node.data.kind === 'api' || node.data.kind === 'transfer') && (
+          <Field
+            label={node.data.kind === 'transfer' ? 'Destination number' : 'Webhook URL'}
+            hint={
+              node.data.kind === 'transfer'
+                ? 'E.164 format, e.g. +15551234567'
+                : 'POSTed at runtime with current variables'
+            }
+          >
+            <input
+              data-testid="webhook-input"
+              className={cn(inputCls, 'font-mono')}
+              value={node.data.webhook ?? ''}
+              onChange={(e) => set({ webhook: e.target.value })}
+              placeholder={
+                node.data.kind === 'transfer'
+                  ? '+15551234567'
+                  : 'https://hooks.acme.com/…'
+              }
+            />
+          </Field>
+        )}
 
-        <Field label="Webhook">
-          <input
-            className={inputCls}
-            value={node.data.webhook ?? ''}
-            onChange={(e) => set({ webhook: e.target.value })}
-            placeholder="https://hooks.acme.com/…"
-          />
-        </Field>
-
-        <Field label="Retry policy">
-          <div className="flex gap-2">
-            {(['none', 'linear', 'exponential'] as RetryPolicy[]).map((r) => (
-              <button
-                key={r}
-                onClick={() => set({ retry: r })}
-                data-testid={`retry-${r}`}
-                data-active={node.data.retry === r ? '1' : '0'}
-                className={cn(
-                  'flex-1 rounded-[8px] border px-2 py-1.5 text-[11px] capitalize transition-colors',
-                  node.data.retry === r
-                    ? 'border-accent bg-accent-soft text-fg'
-                    : 'border-border text-muted hover:text-fg',
-                )}
-              >
-                {r}
-              </button>
-            ))}
-          </div>
-        </Field>
-
-        <Field label="Sample response">
-          <code className="block rounded-[8px] border border-border bg-panel-2 px-2 py-1.5 font-mono text-[11px] text-muted">
-            {node.data.sample ?? '—'}
-          </code>
-        </Field>
+        {/* Holding spot for the dropped placeholders / debug code below. */}
       </div>
     </aside>
   )
