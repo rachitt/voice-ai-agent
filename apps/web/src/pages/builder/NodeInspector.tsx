@@ -127,16 +127,24 @@ export function NodeInspector() {
           />
         </Field>
 
-        <Field label="Prompt">
-          <textarea
-            rows={4}
-            data-testid="prompt-input"
-            className={inputCls}
-            value={node.data.prompt ?? ''}
-            onChange={(e) => set({ prompt: e.target.value, subtitle: e.target.value })}
-            placeholder="What's your voice agent's job here?"
-          />
-        </Field>
+        {node.data.kind !== 'tool_call' && (
+          <Field label={node.data.kind === 'slot_fill' ? 'Intent (optional)' : 'Prompt'}>
+            <textarea
+              rows={node.data.kind === 'slot_fill' ? 2 : 4}
+              data-testid="prompt-input"
+              className={inputCls}
+              value={node.data.prompt ?? ''}
+              onChange={(e) => set({ prompt: e.target.value, subtitle: e.target.value })}
+              placeholder={
+                node.data.kind === 'greeting'
+                  ? 'First thing the agent says, e.g. "Hi! I can book a demo…"'
+                  : node.data.kind === 'slot_fill'
+                    ? 'Context for why we\'re collecting these (optional)'
+                    : "What's your voice agent's job here?"
+              }
+            />
+          </Field>
+        )}
 
         {node.data.kind === 'slot_fill' && (
           <SlotEditor
@@ -641,91 +649,176 @@ function SlotEditor({
   slots: SlotSpec[]
   onChange: (next: SlotSpec[]) => void
 }) {
+  // One row expanded at a time — most edits touch a single slot, so
+  // collapsing the rest cuts the visual weight from "wall of fields" to
+  // a tidy list of slot names with one detail panel.
+  const [expanded, setExpanded] = useState<number | null>(null)
+
   const patch = (i: number, p: Partial<SlotSpec>) =>
     onChange(slots.map((s, idx) => (idx === i ? { ...s, ...p } : s)))
-  const remove = (i: number) => onChange(slots.filter((_, idx) => idx !== i))
-  const add = () =>
+  const remove = (i: number) => {
+    onChange(slots.filter((_, idx) => idx !== i))
+    if (expanded === i) setExpanded(null)
+  }
+  const add = () => {
     onChange([
       ...slots,
-      { name: '', prompt: '', required: true, type: 'string' satisfies SlotSpec['type'] },
+      { name: '', required: true, type: 'string' satisfies SlotSpec['type'] },
     ])
+    setExpanded(slots.length)
+  }
 
   return (
-    <Field label="Slots" hint="Required fields collected before advancing">
-      <div className="space-y-2">
+    <Field label="What do you need to collect?" hint="Agent asks for each in turn">
+      <div className="space-y-1.5">
         {slots.length === 0 && (
           <div className="rounded-[8px] border border-dashed border-border px-3 py-2 text-[11px] text-muted">
-            No slots yet — add one to start gathering.
+            No fields yet — add one below.
           </div>
         )}
-        {slots.map((s, i) => (
-          <div
-            key={i}
-            data-testid={`slot-row-${i}`}
-            className="space-y-1.5 rounded-[8px] border border-border bg-panel-2 p-2"
-          >
-            <div className="flex gap-2">
-              <input
-                data-testid={`slot-name-${i}`}
-                className={cn(inputCls, 'flex-1 font-mono')}
-                value={s.name}
-                onChange={(e) => patch(i, { name: e.target.value })}
-                placeholder="slot_name"
-              />
-              <Select
-                value={s.type ?? 'string'}
-                onChange={(v) => patch(i, { type: v as SlotSpec['type'] })}
-                options={SLOT_TYPES as unknown as string[]}
-              />
-              <button
-                type="button"
-                data-testid={`slot-remove-${i}`}
-                title="Remove slot"
-                onClick={() => remove(i)}
-                className="grid h-7 w-7 place-items-center rounded-[8px] border border-border bg-panel text-muted hover:border-red-500/40 hover:text-red-400"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+        {slots.map((s, i) => {
+          const isOpen = expanded === i
+          return (
+            <div
+              key={i}
+              data-testid={`slot-row-${i}`}
+              className="rounded-[8px] border border-border bg-panel-2"
+            >
+              <div className="flex items-center gap-2 px-2 py-1.5">
+                <input
+                  data-testid={`slot-name-${i}`}
+                  className={cn(inputCls, 'flex-1 font-mono')}
+                  value={s.name}
+                  onChange={(e) => patch(i, { name: e.target.value })}
+                  onFocus={() => setExpanded(i)}
+                  placeholder="field_name"
+                />
+                <button
+                  type="button"
+                  onClick={() => setExpanded(isOpen ? null : i)}
+                  className="text-[11px] text-muted hover:text-fg"
+                  title={isOpen ? 'Collapse' : 'Edit'}
+                >
+                  {isOpen ? '−' : '⋯'}
+                </button>
+                <button
+                  type="button"
+                  data-testid={`slot-remove-${i}`}
+                  title="Remove"
+                  onClick={() => remove(i)}
+                  className="text-muted hover:text-red-400"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              {isOpen && (
+                <div className="space-y-1.5 border-t border-border bg-panel/40 px-2 py-2">
+                  <input
+                    data-testid={`slot-prompt-${i}`}
+                    className={inputCls}
+                    value={s.prompt ?? ''}
+                    onChange={(e) => patch(i, { prompt: e.target.value })}
+                    placeholder='e.g. "their email address"'
+                  />
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={s.type ?? 'string'}
+                      onChange={(v) => patch(i, { type: v as SlotSpec['type'] })}
+                      options={SLOT_TYPES as unknown as string[]}
+                    />
+                    <label className="ml-auto flex items-center gap-1.5 text-[11px] text-muted">
+                      <input
+                        type="checkbox"
+                        checked={s.required !== false}
+                        onChange={(e) => patch(i, { required: e.target.checked })}
+                      />
+                      required
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
-            <input
-              data-testid={`slot-prompt-${i}`}
-              className={inputCls}
-              value={s.prompt ?? ''}
-              onChange={(e) => patch(i, { prompt: e.target.value })}
-              placeholder="How to ask the user for this"
-            />
-            <label className="flex items-center gap-2 text-[11px] text-muted">
-              <input
-                type="checkbox"
-                checked={s.required !== false}
-                onChange={(e) => patch(i, { required: e.target.checked })}
-              />
-              required
-            </label>
-          </div>
-        ))}
+          )
+        })}
         <button
           type="button"
           data-testid="slot-add"
           onClick={add}
           className="w-full rounded-[8px] border border-dashed border-border px-2 py-1.5 text-[11px] text-muted hover:border-accent hover:text-fg"
         >
-          + add slot
+          + add field
         </button>
       </div>
     </Field>
   )
 }
 
-const BUILTIN_TOOLS: { value: string; label: string }[] = [
-  { value: 'book_meeting', label: 'book_meeting — Google Calendar' },
-  { value: 'transfer_call', label: 'transfer_call — handoff to PSTN' },
-  { value: 'end_call', label: 'end_call — hang up' },
-  { value: 'send_dtmf', label: 'send_dtmf — IVR digits' },
-  { value: 'kb_lookup', label: 'kb_lookup — search KB' },
-  { value: 'extract_data', label: 'extract_data — persist slots' },
-  { value: 'leave_voicemail', label: 'leave_voicemail' },
+type BuiltinTool = {
+  value: string
+  label: string
+  description: string
+  // What the agent typically says while this fires; used as the
+  // default pre_message when the author leaves it blank.
+  defaultPre: string
+  defaultSuccess: string
+  defaultError: string
+}
+
+const BUILTIN_TOOLS: BuiltinTool[] = [
+  {
+    value: 'book_meeting',
+    label: 'Book a calendar event',
+    description: 'Add an appointment to your connected Google Calendar',
+    defaultPre: 'One moment — adding that to your calendar.',
+    defaultSuccess: "All booked. You'll see the invite in your inbox.",
+    defaultError: "I couldn't get that on the calendar. Want me to try a different time?",
+  },
+  {
+    value: 'transfer_call',
+    label: 'Transfer to a human',
+    description: 'Hand the live call to another phone number',
+    defaultPre: 'Connecting you now.',
+    defaultSuccess: 'Transferred.',
+    defaultError: "I couldn't reach them. Want me to take a message?",
+  },
+  {
+    value: 'end_call',
+    label: 'End the call',
+    description: 'Hang up gracefully',
+    defaultPre: '',
+    defaultSuccess: 'Thanks for calling. Goodbye.',
+    defaultError: '',
+  },
+  {
+    value: 'send_dtmf',
+    label: 'Send DTMF digits',
+    description: 'Press buttons in an IVR menu',
+    defaultPre: '',
+    defaultSuccess: '',
+    defaultError: '',
+  },
+  {
+    value: 'kb_lookup',
+    label: 'Search knowledge base',
+    description: 'Pull relevant docs into the conversation',
+    defaultPre: 'Let me check that.',
+    defaultSuccess: '',
+    defaultError: "I couldn't find anything on that.",
+  },
+  {
+    value: 'leave_voicemail',
+    label: 'Leave a voicemail',
+    description: 'Speak the message then hang up',
+    defaultPre: '',
+    defaultSuccess: '',
+    defaultError: '',
+  },
 ]
+
+function getToolMeta(value: string | undefined): BuiltinTool | null {
+  if (!value) return null
+  return BUILTIN_TOOLS.find((t) => t.value === value) ?? null
+}
 
 function ToolCallEditor({
   data,
@@ -734,8 +827,25 @@ function ToolCallEditor({
   data: StepData
   onPatch: (p: Partial<StepData>) => void
 }) {
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const tool = getToolMeta(data.tool)
   const argMap = data.arg_map ?? {}
   const argEntries = Object.entries(argMap)
+
+  const pickTool = (value: string) => {
+    // Pull the tool's defaults forward when the author has not customised
+    // the lifecycle messages yet. Lets a new user pick "Book a calendar
+    // event" and immediately get a sensible spoken script without having
+    // to fill four boxes by hand.
+    const meta = getToolMeta(value)
+    const patch: Partial<StepData> = { tool: value }
+    if (meta) {
+      if (!data.pre_message) patch.pre_message = meta.defaultPre
+      if (!data.success_message) patch.success_message = meta.defaultSuccess
+      if (!data.error_message) patch.error_message = meta.defaultError
+    }
+    onPatch(patch)
+  }
 
   const patchArg = (param: string, slot: string) =>
     onPatch({ arg_map: { ...argMap, [param]: slot } })
@@ -751,113 +861,136 @@ function ToolCallEditor({
 
   return (
     <div className="space-y-3">
-      <Field label="Tool" hint="Builtin or tool_xxx DB ref">
-        <input
-          data-testid="tool-ref-input"
-          className={cn(inputCls, 'font-mono')}
+      <Field label="What does this step do?" hint="Pick the action the agent runs here">
+        <select
+          data-testid="tool-ref-select"
           value={data.tool ?? ''}
-          onChange={(e) => onPatch({ tool: e.target.value })}
-          list="tool-suggestions"
-          placeholder="book_meeting"
-        />
-        <datalist id="tool-suggestions">
+          onChange={(e) => pickTool(e.target.value)}
+          className={cn(inputCls, 'appearance-none')}
+        >
+          <option value="" className="bg-panel">
+            — pick an action —
+          </option>
           {BUILTIN_TOOLS.map((t) => (
-            <option key={t.value} value={t.value}>
+            <option key={t.value} value={t.value} className="bg-panel">
               {t.label}
             </option>
           ))}
-        </datalist>
+        </select>
+        {tool && (
+          <p className="mt-1 text-[11px] text-muted">{tool.description}</p>
+        )}
       </Field>
 
-      <Field
-        label="Arg → slot mapping"
-        hint="Empty = 1:1 from var bag"
-      >
-        <div className="space-y-1.5">
-          {argEntries.map(([param, slot]) => (
-            <div key={param} className="flex gap-2">
+      {tool && (
+        <>
+          <Field
+            label="What the agent says while running"
+            hint="Spoken before the action fires"
+          >
+            <input
+              data-testid="pre-message"
+              className={inputCls}
+              value={data.pre_message ?? ''}
+              onChange={(e) => onPatch({ pre_message: e.target.value })}
+              placeholder={tool.defaultPre || '(say nothing)'}
+            />
+          </Field>
+
+          <Field label="Confirm before running" hint="Read back values, wait for yes">
+            <label className="flex items-center gap-2 text-[12px] text-fg">
               <input
-                data-testid={`argmap-param-${param}`}
-                className={cn(inputCls, 'flex-1 font-mono')}
-                value={param}
-                onChange={(e) => {
-                  const next = { ...argMap }
-                  delete next[param]
-                  next[e.target.value] = slot
-                  onPatch({ arg_map: next })
-                }}
-                placeholder="tool_param"
+                type="checkbox"
+                data-testid="confirm-before-fire"
+                checked={!!data.confirm_before_fire}
+                onChange={(e) => onPatch({ confirm_before_fire: e.target.checked })}
               />
-              <span className="self-center text-[11px] text-muted">←</span>
-              <input
-                data-testid={`argmap-slot-${param}`}
-                className={cn(inputCls, 'flex-1 font-mono')}
-                value={slot}
-                onChange={(e) => patchArg(param, e.target.value)}
-                placeholder="slot_name"
-              />
-              <button
-                type="button"
-                title="Remove"
-                onClick={() => removeArg(param)}
-                className="grid h-7 w-7 place-items-center rounded-[8px] border border-border bg-panel-2 text-muted hover:text-red-400"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))}
+              ask user to confirm first
+            </label>
+          </Field>
+
           <button
             type="button"
-            data-testid="argmap-add"
-            onClick={addArg}
-            className="w-full rounded-[8px] border border-dashed border-border px-2 py-1.5 text-[11px] text-muted hover:border-accent hover:text-fg"
+            data-testid="tool-call-advanced-toggle"
+            onClick={() => setAdvancedOpen(!advancedOpen)}
+            className="text-[11px] text-muted hover:text-fg"
           >
-            + add mapping
+            {advancedOpen ? '▾' : '▸'} Advanced
           </button>
-        </div>
-      </Field>
 
-      <Field label="Confirm before fire" hint="Read back values + wait for yes">
-        <label className="flex items-center gap-2 text-[12px] text-fg">
-          <input
-            type="checkbox"
-            data-testid="confirm-before-fire"
-            checked={!!data.confirm_before_fire}
-            onChange={(e) => onPatch({ confirm_before_fire: e.target.checked })}
-          />
-          require explicit confirmation
-        </label>
-      </Field>
+          {advancedOpen && (
+            <div className="space-y-3 rounded-[8px] border border-border bg-panel-2/50 p-3">
+              <Field label="Say on success">
+                <input
+                  data-testid="success-message"
+                  className={inputCls}
+                  value={data.success_message ?? ''}
+                  onChange={(e) => onPatch({ success_message: e.target.value })}
+                  placeholder={tool.defaultSuccess || '(say nothing)'}
+                />
+              </Field>
 
-      <Field label="Pre-message" hint="Spoken before tool fires">
-        <input
-          data-testid="pre-message"
-          className={inputCls}
-          value={data.pre_message ?? ''}
-          onChange={(e) => onPatch({ pre_message: e.target.value })}
-          placeholder="Let me check that for you…"
-        />
-      </Field>
+              <Field label="Say on failure" hint="Routes via 'error' edge if wired">
+                <input
+                  data-testid="error-message"
+                  className={inputCls}
+                  value={data.error_message ?? ''}
+                  onChange={(e) => onPatch({ error_message: e.target.value })}
+                  placeholder={tool.defaultError || '(say nothing)'}
+                />
+              </Field>
 
-      <Field label="Success message" hint="Spoken on tool success">
-        <input
-          data-testid="success-message"
-          className={inputCls}
-          value={data.success_message ?? ''}
-          onChange={(e) => onPatch({ success_message: e.target.value })}
-          placeholder="All booked! You'll get a calendar invite."
-        />
-      </Field>
-
-      <Field label="Error message" hint="Spoken on tool error; routes via 'error' edge">
-        <input
-          data-testid="error-message"
-          className={inputCls}
-          value={data.error_message ?? ''}
-          onChange={(e) => onPatch({ error_message: e.target.value })}
-          placeholder="I'm having trouble booking right now."
-        />
-      </Field>
+              <Field
+                label="Manual field mapping"
+                hint="Leave empty to auto-match slot names to tool parameters"
+              >
+                <div className="space-y-1.5">
+                  {argEntries.map(([param, slot]) => (
+                    <div key={param} className="flex gap-2">
+                      <input
+                        data-testid={`argmap-param-${param}`}
+                        className={cn(inputCls, 'flex-1 font-mono')}
+                        value={param}
+                        onChange={(e) => {
+                          const next = { ...argMap }
+                          delete next[param]
+                          next[e.target.value] = slot
+                          onPatch({ arg_map: next })
+                        }}
+                        placeholder="tool_param"
+                      />
+                      <span className="self-center text-[11px] text-muted">←</span>
+                      <input
+                        data-testid={`argmap-slot-${param}`}
+                        className={cn(inputCls, 'flex-1 font-mono')}
+                        value={slot}
+                        onChange={(e) => patchArg(param, e.target.value)}
+                        placeholder="slot_name"
+                      />
+                      <button
+                        type="button"
+                        title="Remove"
+                        onClick={() => removeArg(param)}
+                        className="grid h-7 w-7 place-items-center rounded-[8px] border border-border bg-panel text-muted hover:text-red-400"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    data-testid="argmap-add"
+                    onClick={addArg}
+                    className="w-full rounded-[8px] border border-dashed border-border px-2 py-1.5 text-[11px] text-muted hover:border-accent hover:text-fg"
+                  >
+                    + add mapping
+                  </button>
+                </div>
+              </Field>
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }
