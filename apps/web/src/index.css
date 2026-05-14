@@ -70,3 +70,79 @@
 @utility glow-accent {
   box-shadow: 0 0 0 1px var(--color-accent-dim), 0 8px 24px -8px var(--color-accent-soft);
 }
+
+/* n8n-style rotating border for actively-executing flow nodes.
+ *
+ * A pseudo-element sits behind the node carrying a conic-gradient with one
+ * bright slice + transparent rest. We rotate the slice by animating the
+ * custom `--flow-angle` property via @property (Chrome 91+, Safari 16.4+,
+ * Firefox 128+). The `mask-composite: exclude` trick carves out the inner
+ * area so only the ring is visible. */
+@property --flow-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes flow-node-spin {
+  to {
+    --flow-angle: 360deg;
+  }
+}
+
+@keyframes flow-node-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.flow-node-executing {
+  position: relative;
+  isolation: isolate;
+}
+
+.flow-node-executing::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 14px;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--flow-angle),
+    rgba(52, 211, 153, 0) 0deg,
+    rgba(52, 211, 153, 0) 240deg,
+    rgba(52, 211, 153, 0.9) 320deg,
+    rgba(110, 231, 183, 1) 340deg,
+    rgba(52, 211, 153, 0.9) 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: flow-node-spin 1.6s linear infinite;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.flow-node-executing::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 18px;
+  background: radial-gradient(
+    circle at center,
+    rgba(52, 211, 153, 0.18) 0%,
+    transparent 60%
+  );
+  z-index: -2;
+  pointer-events: none;
+  animation: flow-node-glow 1.6s ease-in-out infinite;
+}

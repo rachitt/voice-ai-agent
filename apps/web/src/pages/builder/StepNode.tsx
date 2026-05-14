@@ -27,8 +27,12 @@ export function StepNodeView({ id, data, selected }: NodeProps<TStepNode>) {
       data-active={active ? '1' : '0'}
       className={cn(
         'group relative w-[220px] rounded-[12px] border bg-panel shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)] transition-all',
+        // While the FlowExecutor is on this node we drop the static border
+        // and let `.flow-node-executing` paint a rotating conic-gradient
+        // ring (n8n-style). The class targets ::before/::after so this
+        // div's own border stays neutral.
         active
-          ? 'border-emerald-400 shadow-[0_0_0_2px_rgba(52,211,153,0.6),0_0_24px_rgba(52,211,153,0.45)] animate-pulse'
+          ? 'flow-node-executing border-transparent'
           : selected
             ? 'border-accent shadow-[0_0_0_1px_var(--color-accent)]'
             : 'border-border',
