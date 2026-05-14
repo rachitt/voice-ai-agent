@@ -44,7 +44,13 @@ type State = {
    *  events on the test-call WS, consumed by StepNode to glow + scroll into
    *  view. Never persisted. */
   activeFlowNodeId: string | null
-  setActiveFlowNodeId: (id: string | null) => void
+  /** Optional progress hint emitted alongside `flow_node` (currently only
+   *  by slot_fill: {filled: string[], missing: string[]}). */
+  activeFlowProgress: { filled: string[]; missing: string[] } | null
+  setActiveFlowNodeId: (
+    id: string | null,
+    progress?: { filled: string[]; missing: string[] } | null,
+  ) => void
   setSelected: (id: string | null) => void
   setConnectionError: (msg: string | null) => void
   setPendingBranchConnect: (c: Connection | null) => void
@@ -141,7 +147,9 @@ export const useBuilder = create<State>((set, get) => ({
   saveStatus: 'idle',
   saveError: null,
   activeFlowNodeId: null,
-  setActiveFlowNodeId: (id) => set({ activeFlowNodeId: id }),
+  activeFlowProgress: null,
+  setActiveFlowNodeId: (id, progress) =>
+    set({ activeFlowNodeId: id, activeFlowProgress: progress ?? null }),
   setSelected: (id) => set({ selectedId: id }),
   setConnectionError: (msg) => set({ connectionError: msg }),
   setPendingBranchConnect: (c) => set({ pendingBranchConnect: c }),

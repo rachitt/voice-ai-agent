@@ -450,17 +450,53 @@ class FlowExecutor:
         # One-shot system note: tell the LLM what to ask + that it should call
         # extract_data with whatever it learns. The LLM stays in-node until
         # every required slot is on the var bag.
-        wanted = "; ".join(f"{s['name']} ({s['prompt'] or s['type']})" for s in missing)
+        slot_lines: list[str] = []
+        for s in missing:
+            hint = s["prompt"] or s["type"]
+            extras: list[str] = []
+            if s["type"] == "email":
+                extras.append("spell-back letter by letter before extracting")
+            elif s["type"] == "phone":
+                extras.append("read back digit by digit before extracting")
+            elif s["type"] == "iso_datetime":
+                extras.append(
+                    "convert relative dates like 'tomorrow 5pm' to ISO-8601 with the "
+                    "user's timezone offset before extracting"
+                )
+            tail = f" — {'; '.join(extras)}" if extras else ""
+            slot_lines.append(f"`{s['name']}` ({hint}){tail}")
+        wanted = "\n  - ".join(slot_lines)
         intent = (self._render(nv.data.get("prompt")) or "").strip()
+        # Show progress so the user perceives momentum even when looping.
+        filled = [s["name"] for s in self._slot_specs(nv) if self._vars.get(s["name"])]
+        progress = f"Filled so far: {', '.join(filled)}. " if filled else ""
         instructions = (
             (intent + "\n" if intent else "")
-            + f"Still need: {wanted}. Ask for ONE of these next. "
+            + progress
+            + "Still need:\n  - "
+            + wanted
+            + "\n\nAsk for ONE of these next. "
             "When the user supplies a value, IMMEDIATELY call the extract_data tool "
-            "with a JSON object mapping the slot name to the value (e.g. "
-            '{"data": {"attendee_email": "alice@example.com"}}). '
-            "Do not claim you've recorded anything without calling the tool."
+            "with a JSON object mapping the EXACT slot name to the value. Example: "
+            '`{"data": {"attendee_email": "alice@example.com"}}`. '
+            "If you hear it indistinctly, ask them to repeat — do NOT extract a guess. "
+            "Never claim you've saved anything without calling the tool."
         )
         self.pipe.set_step_prompt(instructions)
+        # Re-emit flow_node so the UI's rotating animation pulses on each
+        # loop turn — gives the user visible feedback that the agent is
+        # still on this step, not stuck.
+        try:
+            self.pipe.emit_event(
+                "flow_node",
+                data={
+                    "node_id": nv.id,
+                    "kind": nv.kind,
+                    "progress": {"filled": filled, "missing": [s["name"] for s in missing]},
+                },
+            )
+        except Exception:
+            pass
 
     # --- tool dispatch ------------------------------------------------------
 
@@ -526,30 +562,37 @@ class FlowExecutor:
         return text.strip().lower().startswith("yes")
 
     async def _do_tool_call(self, nv: _NodeView) -> None:
+        import asyncio as _asyncio
+
         tool_name = nv.data.get("tool")
         if not isinstance(tool_name, str) or not tool_name:
             log.warning("flow.tool.missing_ref", node=nv.id)
             await self._enter_after(nv.id)
             return
 
-        # Lifecycle: pre-message → fire → success/error message → route.
-        pre = self._render(nv.data.get("pre_message"))
-        if pre:
-            await self._speak(pre)
-
         args = self._tool_args_from_slots(nv)
         log.info("flow.tool.fire", node=nv.id, tool=tool_name, args=args)
-        result: dict[str, Any]
-        if self.pipe._dispatch is None:  # type: ignore[attr-defined]
-            result = {"error": "no_tool_dispatch"}
-        else:
+
+        # Kick off the dispatch in parallel with the pre-message TTS so the
+        # user hears "booking now…" while the HTTP request is already on
+        # the wire. Big latency win — pre-message playback (~1.5s) overlaps
+        # with the API round-trip instead of stacking.
+        async def _fire() -> dict[str, Any]:
+            if self.pipe._dispatch is None:  # type: ignore[attr-defined]
+                return {"error": "no_tool_dispatch"}
             try:
-                result = await self.pipe._dispatch(  # type: ignore[attr-defined]
+                return await self.pipe._dispatch(  # type: ignore[attr-defined]
                     ToolCall(id=f"flow_{nv.id}", name=tool_name, arguments=args)
                 )
             except Exception as exc:
                 log.exception("flow.tool.err", node=nv.id, err=str(exc))
-                result = {"error": "tool_failed", "detail": str(exc)}
+                return {"error": "tool_failed", "detail": str(exc)}
+
+        dispatch_task = _asyncio.create_task(_fire())
+        pre = self._render(nv.data.get("pre_message"))
+        if pre:
+            await self._speak(pre)
+        result = await dispatch_task
 
         is_error = isinstance(result, dict) and "error" in result
         # Stash the result under the node id so downstream `{{node_id.key}}`

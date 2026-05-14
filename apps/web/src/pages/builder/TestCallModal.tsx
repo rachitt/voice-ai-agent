@@ -84,11 +84,15 @@ export function TestCallModal({
             const d = e.data as {
               type?: string
               text?: string
-              data?: { node_id?: string; kind?: string }
+              data?: {
+                node_id?: string
+                kind?: string
+                progress?: { filled: string[]; missing: string[] }
+              }
             }
             const t = d.type
             if (t === 'flow_node' && d.data?.node_id) {
-              setActiveFlowNodeId(d.data.node_id)
+              setActiveFlowNodeId(d.data.node_id, d.data.progress ?? null)
             } else if (t === 'tts_error') {
               const msg = (d.data as { err?: string } | undefined)?.err ?? 'tts unavailable'
               setTtsError(msg)

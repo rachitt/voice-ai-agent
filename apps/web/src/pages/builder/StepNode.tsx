@@ -18,6 +18,7 @@ export function StepNodeView({ id, data, selected }: NodeProps<TStepNode>) {
   // time the FlowExecutor emits `flow_node` on the WS. Border + pulsing
   // glow make the active step pop without disturbing layout.
   const active = useBuilder((s) => s.activeFlowNodeId === id)
+  const progress = useBuilder((s) => (active ? s.activeFlowProgress : null))
   return (
     <div
       data-testid="step-node"
@@ -57,6 +58,29 @@ export function StepNodeView({ id, data, selected }: NodeProps<TStepNode>) {
       </div>
       <div className="px-3 pb-3 pt-1">
         <p className="line-clamp-2 text-[12px] text-muted">{data.subtitle ?? data.prompt ?? '…'}</p>
+        {progress && data.kind === 'slot_fill' && (
+          <div
+            data-testid="slot-fill-progress"
+            className="mt-2 flex flex-wrap gap-1"
+          >
+            {progress.filled.map((slot) => (
+              <span
+                key={`f-${slot}`}
+                className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] text-emerald-300"
+              >
+                ✓ {slot}
+              </span>
+            ))}
+            {progress.missing.map((slot) => (
+              <span
+                key={`m-${slot}`}
+                className="rounded-full bg-panel-2 px-1.5 py-0.5 text-[10px] text-muted/70"
+              >
+                {slot}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       <Handle
         type="source"
