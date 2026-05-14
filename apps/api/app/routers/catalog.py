@@ -80,6 +80,12 @@ def _reset_voice_cache_for_tests() -> None:  # used by pytest fixtures
 
 _MODELS = [
     {
+        "id": "gemini/gemini-2.5-flash",
+        "label": "Gemini 2.5 Flash",
+        "vendor": "google",
+        "tier": "fast",
+    },
+    {
         "id": "gemini/gemini-3.1-flash-lite",
         "label": "Gemini 3.1 Flash Lite",
         "vendor": "google",

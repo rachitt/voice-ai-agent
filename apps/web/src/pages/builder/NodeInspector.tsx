@@ -8,6 +8,7 @@ import { catalog, type CatalogModel, type CatalogVoice } from '@/lib/api'
 import type { SlotSpec, StepData } from './types'
 
 const MODEL_FALLBACK: CatalogModel[] = [
+  { id: 'gemini/gemini-2.5-flash', label: 'Gemini 2.5 Flash', vendor: 'google', tier: 'fast' },
   { id: 'gemini/gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite', vendor: 'google', tier: 'fast' },
   { id: 'gpt-4o-mini', label: 'GPT-4o mini', vendor: 'openai', tier: 'fast' },
 ]
