@@ -94,11 +94,11 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         auth_header = request.headers.get("authorization", "")
 
         # Only session-cookie callers need CSRF protection. Pure Bearer-API-key
-        # callers (external SDKs) skip the check; if BOTH are present we still
-        # require CSRF because the cookie path is dangerous.
+        # callers (external SDKs) skip the check; if a session cookie exists
+        # we enforce double-submit even when a Bearer header is also present
+        # because the cookie path remains exploitable.
         if not session_cookie:
-            return await call_next(request)
-        if not session_cookie and auth_header.lower().startswith("bearer "):
+            _ = auth_header  # kept for clarity; pure-Bearer requests skip CSRF
             return await call_next(request)
 
         cookie_token = request.cookies.get(CSRF_COOKIE)
