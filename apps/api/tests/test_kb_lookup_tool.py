@@ -1,4 +1,5 @@
 """kb_lookup builtin tool: registration, dispatch, and auto-binding."""
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -27,7 +28,9 @@ async def test_kb_lookup_handler_returns_hits(db_session, monkeypatch):
             kb_store.Retrieval(chunk_id="kbc_1", source_id="kbs_1", text="refunds", score=0.9),
         ]
 
-    monkeypatch.setattr("app.tools.builtins.kb_search" if False else "app.kb.store.search", fake_search)
+    monkeypatch.setattr(
+        "app.tools.builtins.kb_search" if False else "app.kb.store.search", fake_search
+    )
 
     org = models.Org(name="O", slug="o")
     db_session.add(org)
@@ -36,7 +39,10 @@ async def test_kb_lookup_handler_returns_hits(db_session, monkeypatch):
     db_session.add(agent)
     await db_session.flush()
     call = models.Call(
-        org_id=org.id, agent_id=agent.id, direction="web", status="in_progress",
+        org_id=org.id,
+        agent_id=agent.id,
+        direction="web",
+        status="in_progress",
     )
     db_session.add(call)
     await db_session.commit()
@@ -86,9 +92,16 @@ async def test_kb_lookup_no_kb_bound(db_session):
 
 def test_resolve_tools_auto_binds_kb_lookup_for_bound_kb():
     ver = models.AgentVersion(
-        agent_id="ag_x", version=1, knowledge_base_ids=["kb_a"], tools=[], flow_graph=None,
+        agent_id="ag_x",
+        version=1,
+        knowledge_base_ids=["kb_a"],
+        tools=[],
+        flow_graph=None,
     )
-    names = [t["function"]["name"] for t in _resolve_tools(ver)]
+    import asyncio as _aio
+
+    defs, _custom = _aio.run(_resolve_tools(ver))
+    names = [t["function"]["name"] for t in defs]
     assert "kb_lookup" in names
 
 
@@ -98,17 +111,31 @@ def test_resolve_tools_auto_binds_kb_lookup_for_graph_node():
         "edges": [],
     }
     ver = models.AgentVersion(
-        agent_id="ag_x", version=1, knowledge_base_ids=[], tools=[], flow_graph=graph,
+        agent_id="ag_x",
+        version=1,
+        knowledge_base_ids=[],
+        tools=[],
+        flow_graph=graph,
     )
-    names = [t["function"]["name"] for t in _resolve_tools(ver)]
+    import asyncio as _aio
+
+    defs, _custom = _aio.run(_resolve_tools(ver))
+    names = [t["function"]["name"] for t in defs]
     assert "kb_lookup" in names
 
 
 def test_resolve_tools_no_kb_when_neither_present():
     ver = models.AgentVersion(
-        agent_id="ag_x", version=1, knowledge_base_ids=[], tools=[], flow_graph={"nodes": [], "edges": []},
+        agent_id="ag_x",
+        version=1,
+        knowledge_base_ids=[],
+        tools=[],
+        flow_graph={"nodes": [], "edges": []},
     )
-    names = [t["function"]["name"] for t in _resolve_tools(ver)]
+    import asyncio as _aio
+
+    defs, _custom = _aio.run(_resolve_tools(ver))
+    names = [t["function"]["name"] for t in defs]
     assert "kb_lookup" not in names
 
 
@@ -121,7 +148,10 @@ def test_resolve_tools_no_duplicate_when_explicit_and_graph():
         tools=["kb_lookup"],
         flow_graph=graph,
     )
-    names = [t["function"]["name"] for t in _resolve_tools(ver)]
+    import asyncio as _aio
+
+    defs, _custom = _aio.run(_resolve_tools(ver))
+    names = [t["function"]["name"] for t in defs]
     assert names.count("kb_lookup") == 1
 
 

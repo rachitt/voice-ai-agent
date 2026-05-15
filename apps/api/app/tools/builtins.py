@@ -4,6 +4,7 @@ Definitions are LLM-tool-call shaped (OpenAI tool schema). Handlers receive
 a ToolContext with the call object, db session, and telnyx client; they may
 mutate call state, dispatch DTMF/transfer/hangup, or extract structured data.
 """
+
 from __future__ import annotations
 
 import json
@@ -61,6 +62,7 @@ async def dispatch(name: str, ctx: ToolContext) -> dict[str, Any]:
 
 # --- Definitions ---------------------------------------------------------
 
+
 def _def(name: str, description: str, params: dict[str, Any]) -> dict[str, Any]:
     return {
         "type": "function",
@@ -73,6 +75,7 @@ def _def(name: str, description: str, params: dict[str, Any]) -> dict[str, Any]:
 
 
 # --- Handlers ------------------------------------------------------------
+
 
 async def _end_call(ctx: ToolContext) -> dict[str, Any]:
     ctx.call.status = CallStatus.completed
@@ -89,9 +92,7 @@ async def _transfer_call(ctx: ToolContext) -> dict[str, Any]:
     if not to:
         return {"error": "missing_to"}
     if ctx.telnyx and ctx.call.provider_call_id and ctx.call.to_number:
-        await ctx.telnyx.transfer(
-            ctx.call.provider_call_id, to=to, from_=ctx.call.to_number
-        )
+        await ctx.telnyx.transfer(ctx.call.provider_call_id, to=to, from_=ctx.call.to_number)
     return {"transferred_to": to, "summary": summary}
 
 
@@ -166,6 +167,39 @@ async def _kb_lookup(ctx: ToolContext) -> dict[str, Any]:
     }
 
 
+async def _book_meeting(ctx: ToolContext) -> dict[str, Any]:
+    """Book a calendar event.
+
+    Resolution order:
+      1. Per-org OAuth integration (user connected via /settings/integrations)
+      2. Env-configured service account (headless / fallback)
+
+    Args (LLM-supplied): title, start_iso, attendee_email, duration_min?, description?
+    Returns: {event_id, html_link, start, end} on success; {error: ...} otherwise.
+    """
+    from app.tools.calendar import book_event, book_event_for_org
+
+    args = ctx.args or {}
+    title = (args.get("title") or "").strip()
+    start_iso = (args.get("start_iso") or "").strip()
+    if not title:
+        return {"error": "missing_title"}
+    if not start_iso:
+        return {"error": "missing_start_iso"}
+    common = {
+        "title": title,
+        "start_iso": start_iso,
+        "attendee_email": (args.get("attendee_email") or None),
+        "duration_min": (args.get("duration_min") or None),
+        "description": (args.get("description") or None),
+    }
+    # Live-call path: ctx.call carries org_id → use per-org OAuth integration.
+    # Headless / test path: no call attached → fall back to SA-from-env.
+    if ctx.call is not None and ctx.db is not None:
+        return await book_event_for_org(db=ctx.db, org_id=ctx.call.org_id, **common)
+    return await book_event(**common)
+
+
 async def _extract_data(ctx: ToolContext) -> dict[str, Any]:
     args = ctx.args or {}
     # Caller-provided values stored on dynamic_variables for downstream use.
@@ -234,6 +268,30 @@ register(
         },
     ),
     handler=_kb_lookup,
+)
+register(
+    "book_meeting",
+    definition=_def(
+        "book_meeting",
+        "Book a calendar event on the configured Google calendar. Use when the caller agrees to a specific time. Always pass an ISO-8601 start (UTC or with offset).",
+        {
+            "title": {"type": "string", "description": "Event title"},
+            "start_iso": {
+                "type": "string",
+                "description": "ISO-8601 start time, e.g. 2026-05-15T15:00:00-07:00",
+            },
+            "attendee_email": {
+                "type": "string",
+                "description": "Email of the person to invite (optional)",
+            },
+            "duration_min": {
+                "type": "integer",
+                "description": "Override default meeting length (minutes)",
+            },
+            "description": {"type": "string", "description": "Free-text agenda"},
+        },
+    ),
+    handler=_book_meeting,
 )
 register(
     "extract_data",

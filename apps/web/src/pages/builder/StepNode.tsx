@@ -2,6 +2,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { cn } from '@/lib/cn'
 import { RULES } from './connection-rules'
 import { KIND_ICON, KIND_TINT } from './icons'
+import { useBuilder } from './store'
 import type { StepNode as TStepNode } from './types'
 
 const HANDLE_BASE =
@@ -13,15 +14,29 @@ export function StepNodeView({ id, data, selected }: NodeProps<TStepNode>) {
   const rule = RULES[data.kind]
   const canTarget = rule.inAllowed
   const canSource = rule.outMax > 0 && !rule.terminal
+  // Live-call execution highlight. The TestCallModal flips this id every
+  // time the FlowExecutor emits `flow_node` on the WS. Border + pulsing
+  // glow make the active step pop without disturbing layout.
+  const active = useBuilder((s) => s.activeFlowNodeId === id)
+  const progress = useBuilder((s) => (active ? s.activeFlowProgress : null))
   return (
     <div
       data-testid="step-node"
       data-node-id={id}
       data-kind={data.kind}
       data-selected={selected ? '1' : '0'}
+      data-active={active ? '1' : '0'}
       className={cn(
         'group relative w-[220px] rounded-[12px] border bg-panel shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)] transition-all',
-        selected ? 'border-accent shadow-[0_0_0_1px_var(--color-accent)]' : 'border-border',
+        // While the FlowExecutor is on this node we drop the static border
+        // and let `.flow-node-executing` paint a rotating conic-gradient
+        // ring (n8n-style). The class targets ::before/::after so this
+        // div's own border stays neutral.
+        active
+          ? 'flow-node-executing border-transparent'
+          : selected
+            ? 'border-accent shadow-[0_0_0_1px_var(--color-accent)]'
+            : 'border-border',
       )}
     >
       <Handle
@@ -43,6 +58,29 @@ export function StepNodeView({ id, data, selected }: NodeProps<TStepNode>) {
       </div>
       <div className="px-3 pb-3 pt-1">
         <p className="line-clamp-2 text-[12px] text-muted">{data.subtitle ?? data.prompt ?? '…'}</p>
+        {progress && data.kind === 'slot_fill' && (
+          <div
+            data-testid="slot-fill-progress"
+            className="mt-2 flex flex-wrap gap-1"
+          >
+            {progress.filled.map((slot) => (
+              <span
+                key={`f-${slot}`}
+                className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] text-emerald-300"
+              >
+                ✓ {slot}
+              </span>
+            ))}
+            {progress.missing.map((slot) => (
+              <span
+                key={`m-${slot}`}
+                className="rounded-full bg-panel-2 px-1.5 py-0.5 text-[10px] text-muted/70"
+              >
+                {slot}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       <Handle
         type="source"

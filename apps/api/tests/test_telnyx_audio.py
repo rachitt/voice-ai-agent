@@ -1,4 +1,5 @@
 """μ-law ↔ linear16 transcode roundtrip."""
+
 from __future__ import annotations
 
 import math

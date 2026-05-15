@@ -4,13 +4,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
+from app.core.csrf import CSRFMiddleware
 from app.core.logging import configure_logging, log
 from app.routers import (
     agents,
     api_keys,
     auth_oauth,
     calls,
+    catalog,
     console,
+    integrations,
     knowledge_bases,
     phone_numbers,
     squads,
@@ -40,6 +43,9 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # CSRF runs AFTER CORS in the request path (Starlette wraps innermost first
+    # → outermost), so preflight responses still get the right headers.
+    app.add_middleware(CSRFMiddleware)
 
     @app.get("/healthz", tags=["meta"])
     async def healthz() -> dict[str, str]:
@@ -57,6 +63,8 @@ def create_app() -> FastAPI:
     app.include_router(auth_oauth.router)
     app.include_router(api_keys.router)
     app.include_router(console.router)
+    app.include_router(catalog.router)
+    app.include_router(integrations.router)
 
     return app
 

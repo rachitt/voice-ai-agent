@@ -4,6 +4,7 @@ Separate from API-key bearer auth. JWT payload:
     {"sub": user_id, "org": org_id, "exp": unix_ts}
 Signed with session_secret (HS256). Stored in an HttpOnly, SameSite=Lax cookie.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -16,8 +17,16 @@ ALGORITHM = "HS256"
 
 
 def _secret() -> str:
-    # Re-use webhook_hmac_secret as the session key — single secret to rotate.
-    return get_settings().webhook_hmac_secret
+    """Session JWT signing key.
+
+    Prefers the dedicated `session_secret` setting; falls back to the
+    legacy `webhook_hmac_secret` if unset, so envs that haven't rotated
+    yet keep working. Once `session_secret` is configured in prod, the
+    two can rotate independently (webhook HMAC rotation no longer
+    invalidates every active dashboard session).
+    """
+    s = get_settings()
+    return s.session_secret or s.webhook_hmac_secret
 
 
 def mint_session(user_id: str, org_id: str, ttl_seconds: int | None = None) -> str:

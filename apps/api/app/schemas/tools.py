@@ -16,6 +16,16 @@ class ToolIn(BaseModel):
     timeout_ms: int = 10000
 
 
+class ToolUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    server_url: str | None = None
+    method: str | None = None
+    headers: dict[str, str] | None = None
+    params_schema: dict[str, Any] | None = None
+    timeout_ms: int | None = None
+
+
 class ToolOut(ToolIn):
     model_config = ConfigDict(from_attributes=True)
     id: str

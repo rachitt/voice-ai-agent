@@ -1,4 +1,5 @@
 """WS session token + web-call create endpoint wiring."""
+
 from __future__ import annotations
 
 import os

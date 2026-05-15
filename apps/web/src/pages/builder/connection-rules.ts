@@ -21,7 +21,16 @@ export interface KindRule {
 
 export const RULES: Record<StepKind, KindRule> = {
   greeting: { inAllowed: false, outMax: 1, outNeedsLabel: false, terminal: false, root: true },
-  collect: { inAllowed: true, outMax: 1, outNeedsLabel: false, terminal: false, root: false },
+  collect: { inAllowed: true, outMax: 8, outNeedsLabel: false, terminal: false, root: false },
+  slot_fill: { inAllowed: true, outMax: 1, outNeedsLabel: false, terminal: false, root: false },
+  tool_call: {
+    inAllowed: true,
+    outMax: 2,
+    outNeedsLabel: true,
+    allowedLabels: ['success', 'error'],
+    terminal: false,
+    root: false,
+  },
   api: { inAllowed: true, outMax: 1, outNeedsLabel: false, terminal: false, root: false },
   condition: {
     inAllowed: true,

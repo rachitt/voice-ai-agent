@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     enable_async_kb_ingest: bool = Field(False)
     enable_webhook_worker: bool = Field(False)
     enable_post_call_analysis: bool = Field(False)
-    analysis_model: str = Field("gemini/gemini-2.0-flash")
+    analysis_model: str = Field("gemini/gemini-3.1-flash-lite")
 
     google_oauth_client_id: str = Field("")
     google_oauth_client_secret: str = Field("")
@@ -42,6 +42,17 @@ class Settings(BaseSettings):
 
     webhook_hmac_secret: str = Field("dev-hmac-secret-rotate-in-prod")
     api_key_pepper: str = Field("dev-pepper-rotate-in-prod")
+    # Distinct secret for session JWTs so rotating one doesn't invalidate
+    # the other. Empty value falls back to webhook_hmac_secret for
+    # backwards-compat with existing deployments.
+    session_secret: str = Field("")
+
+    # Google Calendar (book_meeting builtin). Paste the entire service-account
+    # JSON blob as a single env value; we parse it lazily so the app boots
+    # even when calendar is disabled.
+    google_service_account_json: str = Field("")
+    google_calendar_id: str = Field("primary")
+    google_calendar_default_duration_min: int = Field(30)
 
     cors_origins: list[str] = Field(
         default_factory=lambda: [

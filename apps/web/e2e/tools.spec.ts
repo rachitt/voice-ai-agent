@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { mockAuthed } from './_auth'
 
 /**
  * Tools page CRUD + inline edit smoke. Mocks /v1/tools list/create/PATCH/delete
@@ -24,7 +25,7 @@ test.describe('Tools page', () => {
   test.beforeEach(async ({ page }) => {
     const state: { rows: (typeof baseRow)[] } = { rows: [{ ...baseRow }] }
 
-    await page.route('**/v1/auth/me', (r) => r.fulfill({ status: 401, body: '' }))
+    await mockAuthed(page)
 
     await page.route(/\/v1\/tools$/, async (route) => {
       const req = route.request()

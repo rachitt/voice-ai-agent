@@ -3,6 +3,7 @@
 Telnyx signs `${timestamp}|${raw_body}` with their per-account Ed25519 key and
 sends the signature in base64. We hold their public key in settings.
 """
+
 from __future__ import annotations
 
 import base64

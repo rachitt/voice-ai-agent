@@ -1,4 +1,5 @@
 """kb_ingest async worker task. Tests the function in isolation (no Redis)."""
+
 from __future__ import annotations
 
 import pytest
@@ -52,7 +53,10 @@ async def test_ingest_kb_source_happy_path(db_session, monkeypatch):
     db_session.add(kb)
     await db_session.flush()
     src = models.KbSource(
-        kb_id=kb.id, name="policy.txt", kind="txt", status="queued",
+        kb_id=kb.id,
+        name="policy.txt",
+        kind="txt",
+        status="queued",
         s3_key=f"kb/{kb.id}/x/policy.txt",
     )
     db_session.add(src)
@@ -79,6 +83,7 @@ async def test_ingest_kb_source_happy_path(db_session, monkeypatch):
         return [[0.0] * 1536 for _ in texts]
 
     from app.kb import store as kb_store
+
     monkeypatch.setattr(kb_store, "embed", fake_embed)
 
     res = await kb_worker.ingest_kb_source({}, src.id)

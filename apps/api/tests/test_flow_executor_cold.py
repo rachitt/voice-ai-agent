@@ -42,7 +42,9 @@ def test_constructor_skips_non_dict_nodes_and_edges():
     )
     assert "ok" in fe._nodes
     assert "no-kind" not in fe._nodes
-    assert fe._edges.get("ok") == [("ok", None)]
+    # Edge tuples are now (target, label, condition) to support Retell-style
+    # NL transitions on outbound edges.
+    assert fe._edges.get("ok") == [("ok", None, None)]
 
 
 def test_render_empty_text_returns_empty():
@@ -179,9 +181,7 @@ async def test_kb_node_skip_when_no_query_or_kb():
     # Empty query → skip.
     await fe._do_kb(_NodeView(id="x", kind="kb_lookup", data={"kb_id": "k", "query_template": ""}))
     # Empty kb_id → skip.
-    await fe._do_kb(
-        _NodeView(id="y", kind="kb_lookup", data={"query_template": "q"})
-    )
+    await fe._do_kb(_NodeView(id="y", kind="kb_lookup", data={"query_template": "q"}))
     assert calls == []
 
 
@@ -256,7 +256,9 @@ async def test_api_node_non_json_response_still_logs_note(monkeypatch):
             return real_cls(*a, **kw)
 
     monkeypatch.setattr(fe_mod.httpx, "AsyncClient", _Factory())
-    await fe._do_api(_NodeView(id="x", kind="api", data={"webhook": "https://up/api", "title": "t"}))
+    await fe._do_api(
+        _NodeView(id="x", kind="api", data={"webhook": "https://up/api", "title": "t"})
+    )
 
 
 @pytest.mark.asyncio
@@ -384,7 +386,7 @@ async def test_classify_returns_no_on_llm_exception():
 @pytest.mark.asyncio
 async def test_classify_explicit_no_starts_with_no():
     """Explicit 'no, the caller…' should still classify as no."""
-    from app.pipeline.orchestrator import TextChunk, TurnComplete, ToolCall  # noqa: F401
+    from app.pipeline.orchestrator import TextChunk, ToolCall, TurnComplete  # noqa: F401
 
     class _FakePipe:
         _messages: list[dict] = [{"role": "user", "content": "I want pizza"}]

@@ -20,4 +20,5 @@ class ApiKeyOut(BaseModel):
 
 class ApiKeyCreated(ApiKeyOut):
     """One-shot response on mint — `key` is shown ONCE and never persisted in plaintext."""
+
     key: str

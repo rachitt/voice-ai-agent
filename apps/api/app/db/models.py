@@ -100,8 +100,12 @@ class AgentVersion(Base, TimestampMixin):
 
     first_message: Mapped[str | None] = mapped_column(Text)
     system_prompt: Mapped[str | None] = mapped_column(Text)
-    model_id: Mapped[str] = mapped_column(String(80), default="gemini-2.0-flash", nullable=False)
-    voice_id: Mapped[str] = mapped_column(String(80), default="eleven_flash_v2_5", nullable=False)
+    model_id: Mapped[str] = mapped_column(
+        String(80), default="gemini/gemini-3.1-flash-lite", nullable=False
+    )
+    voice_id: Mapped[str] = mapped_column(
+        String(80), default="EXAVITQu4vr4xnSDxMaL", nullable=False
+    )
     stt_id: Mapped[str] = mapped_column(String(80), default="deepgram-nova-3", nullable=False)
     language: Mapped[str] = mapped_column(String(16), default="en", nullable=False)
 
@@ -112,6 +116,7 @@ class AgentVersion(Base, TimestampMixin):
     tools: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
     knowledge_base_ids: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
     analysis_plan: Mapped[dict | None] = mapped_column(JSONB)
+    dynamic_variables: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     server_url: Mapped[str | None] = mapped_column(String(512))
 
     agent: Mapped[Agent] = relationship(back_populates="versions", foreign_keys=[agent_id])
@@ -142,6 +147,30 @@ class PhoneNumber(Base, TimestampMixin):
     provider_resource_id: Mapped[str | None] = mapped_column(String(120))
     agent_id: Mapped[str | None] = mapped_column(ForeignKey("agents.id", ondelete="SET NULL"))
     status: Mapped[str] = mapped_column(String(32), default="active", nullable=False)
+
+
+class OAuthIntegration(Base, TimestampMixin):
+    """Per-org OAuth refresh tokens for third-party services (calendar, CRM, etc.).
+
+    Stored per org so a single workspace's agents share a calendar connection
+    without each user having to re-grant access. `refresh_token` is long-lived;
+    `access_token` is a cache populated by the adapter and refreshed on demand.
+    """
+
+    __tablename__ = "oauth_integrations"
+    id: Mapped[str] = mapped_column(String(48), primary_key=True, default=lambda: _id("oint"))
+    org_id: Mapped[str] = mapped_column(
+        ForeignKey("orgs.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    account_email: Mapped[str | None] = mapped_column(String(240))
+    refresh_token: Mapped[str] = mapped_column(Text, nullable=False)
+    access_token: Mapped[str | None] = mapped_column(Text)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    scopes: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    __table_args__ = (
+        UniqueConstraint("org_id", "provider", name="uq_oauth_integrations_org_provider"),
+    )
 
 
 class KnowledgeBase(Base, TimestampMixin):
@@ -202,9 +231,7 @@ class Squad(Base, TimestampMixin):
 class SquadEdge(Base, TimestampMixin):
     __tablename__ = "squad_edges"
     id: Mapped[str] = mapped_column(String(48), primary_key=True, default=lambda: _id("sqe"))
-    squad_id: Mapped[str] = mapped_column(
-        ForeignKey("squads.id", ondelete="CASCADE"), index=True
-    )
+    squad_id: Mapped[str] = mapped_column(ForeignKey("squads.id", ondelete="CASCADE"), index=True)
     from_agent_id: Mapped[str] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"))
     to_agent_id: Mapped[str] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"))
     context_policy: Mapped[str] = mapped_column(String(16), default="last", nullable=False)

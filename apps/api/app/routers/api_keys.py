@@ -9,6 +9,7 @@ Flow:
   GET    /v1/api-keys         → list (no raw, just metadata)
   DELETE /v1/api-keys/{id}    → soft-revoke (sets revoked_at)
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -51,12 +52,14 @@ async def list_api_keys(
     p: SessionPrincipal = Depends(require_session),
 ) -> list[ApiKey]:
     rows = (
-        await db.execute(
-            select(ApiKey)
-            .where(ApiKey.org_id == p.org.id)
-            .order_by(ApiKey.created_at.desc())
+        (
+            await db.execute(
+                select(ApiKey).where(ApiKey.org_id == p.org.id).order_by(ApiKey.created_at.desc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return list(rows)
 
 
@@ -67,9 +70,7 @@ async def revoke_api_key(
     p: SessionPrincipal = Depends(require_session),
 ) -> None:
     key = (
-        await db.execute(
-            select(ApiKey).where(ApiKey.id == key_id, ApiKey.org_id == p.org.id)
-        )
+        await db.execute(select(ApiKey).where(ApiKey.id == key_id, ApiKey.org_id == p.org.id))
     ).scalar_one_or_none()
     if not key:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "api key not found")

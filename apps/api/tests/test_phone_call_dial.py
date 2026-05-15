@@ -1,4 +1,5 @@
 """POST /v1/calls/phone wires up Telnyx initiate_call."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock
@@ -20,9 +21,7 @@ def telnyx_configured(monkeypatch):
 @pytest.fixture
 def fake_telnyx(monkeypatch):
     client = AsyncMock()
-    client.initiate_call = AsyncMock(
-        return_value={"data": {"call_control_id": "cc_pstn_123"}}
-    )
+    client.initiate_call = AsyncMock(return_value={"data": {"call_control_id": "cc_pstn_123"}})
     client.aclose = AsyncMock()
     monkeypatch.setattr(calls_router, "_telnyx_client_factory", lambda: client)
     return client

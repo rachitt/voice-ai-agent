@@ -21,6 +21,8 @@ export interface AgentMeta {
   modelId: string
   voiceId: string
   publishedVersionId: string | null
+  analysisPlan: Record<string, unknown> | null
+  dynamicVariables: Record<string, unknown>
 }
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
@@ -37,6 +39,18 @@ type State = {
   agentMeta: AgentMeta | null
   saveStatus: SaveStatus
   saveError: string | null
+  /** ID of the flow node currently being executed during a live test call.
+   *  Null when there's no active call. Pure UI state — driven by `flow_node`
+   *  events on the test-call WS, consumed by StepNode to glow + scroll into
+   *  view. Never persisted. */
+  activeFlowNodeId: string | null
+  /** Optional progress hint emitted alongside `flow_node` (currently only
+   *  by slot_fill: {filled: string[], missing: string[]}). */
+  activeFlowProgress: { filled: string[]; missing: string[] } | null
+  setActiveFlowNodeId: (
+    id: string | null,
+    progress?: { filled: string[]; missing: string[] } | null,
+  ) => void
   setSelected: (id: string | null) => void
   setConnectionError: (msg: string | null) => void
   setPendingBranchConnect: (c: Connection | null) => void
@@ -114,6 +128,8 @@ const nextId = (kind: string) => `${kind}-${Date.now().toString(36)}-${counter++
 const TITLES: Record<StepKind, string> = {
   greeting: 'Greeting',
   collect: 'Collect Info',
+  slot_fill: 'Slot Fill',
+  tool_call: 'Tool Call',
   api: 'API Call',
   condition: 'Condition',
   transfer: 'Transfer',
@@ -130,6 +146,10 @@ export const useBuilder = create<State>((set, get) => ({
   agentMeta: null,
   saveStatus: 'idle',
   saveError: null,
+  activeFlowNodeId: null,
+  activeFlowProgress: null,
+  setActiveFlowNodeId: (id, progress) =>
+    set({ activeFlowNodeId: id, activeFlowProgress: progress ?? null }),
   setSelected: (id) => set({ selectedId: id }),
   setConnectionError: (msg) => set({ connectionError: msg }),
   setPendingBranchConnect: (c) => set({ pendingBranchConnect: c }),
@@ -254,6 +274,8 @@ export const useBuilder = create<State>((set, get) => ({
         modelId: ver.model_id,
         voiceId: ver.voice_id,
         publishedVersionId: detail.published_version_id,
+        analysisPlan: ver.analysis_plan ?? null,
+        dynamicVariables: ver.dynamic_variables ?? {},
       },
       saveStatus: 'idle',
       saveError: null,

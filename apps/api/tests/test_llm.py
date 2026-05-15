@@ -16,9 +16,7 @@ def test_message_to_litellm_minimal():
 
 
 def test_message_to_litellm_with_tool_call():
-    m = llm_mod.Message(
-        role="tool", content="ok", tool_call_id="tc_1", name="end_call"
-    )
+    m = llm_mod.Message(role="tool", content="ok", tool_call_id="tc_1", name="end_call")
     assert m.to_litellm() == {
         "role": "tool",
         "content": "ok",
@@ -32,7 +30,7 @@ def test_provider_kwargs_gemini(monkeypatch):
 
     cfg.get_settings.cache_clear()
     monkeypatch.setenv("VOICE_GEMINI_API_KEY", "gem-xyz")
-    assert llm_mod._provider_kwargs("gemini-2.0-flash") == {"api_key": "gem-xyz"}
+    assert llm_mod._provider_kwargs("gemini/gemini-3.1-flash-lite") == {"api_key": "gem-xyz"}
     cfg.get_settings.cache_clear()
 
 
@@ -83,12 +81,8 @@ async def test_complete_returns_raw_dict_when_no_model_dump(monkeypatch):
 @pytest.mark.asyncio
 async def test_stream_yields_text_deltas(monkeypatch):
     async def gen():
-        yield SimpleNamespace(
-            choices=[SimpleNamespace(delta=SimpleNamespace(content="Hel"))]
-        )
-        yield SimpleNamespace(
-            choices=[SimpleNamespace(delta=SimpleNamespace(content="lo"))]
-        )
+        yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="Hel"))])
+        yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="lo"))])
         yield SimpleNamespace(choices=[])  # empty choices skipped
         yield SimpleNamespace(
             choices=[SimpleNamespace(delta=SimpleNamespace(content=""))]
@@ -101,7 +95,7 @@ async def test_stream_yields_text_deltas(monkeypatch):
     monkeypatch.setattr(llm_mod.litellm, "acompletion", fake_acompletion)
     out: list[str] = []
     async for tok in llm_mod.stream(
-        model_id="gemini-2.0-flash",
+        model_id="gemini/gemini-3.1-flash-lite",
         messages=[llm_mod.Message(role="user", content="hi")],
         tools=[{"type": "function", "function": {"name": "x"}}],
     ):
@@ -136,7 +130,8 @@ async def test_embed_handles_dict_response(monkeypatch):
 @pytest.mark.asyncio
 async def test_embed_handles_object_response(monkeypatch):
     class _D:
-        def __init__(self, e): self.embedding = e
+        def __init__(self, e):
+            self.embedding = e
 
     class _R:
         data = [_D([1.0]), _D([2.0])]

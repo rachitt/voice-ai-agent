@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import Principal, require_api_key
+from app.core.auth import AuthedPrincipal, require_principal
 from app.core.config import get_settings
 from app.core.security import hash_api_key
 from app.db.models import Agent, ApiKey, Call, CallDirection, CallStatus, Org
@@ -51,7 +51,7 @@ def _telnyx_client_factory() -> TelnyxClient:
 async def create_phone_call(
     body: PhoneCallCreate,
     db: AsyncSession = Depends(get_db),
-    p: Principal = Depends(require_api_key),
+    p: AuthedPrincipal = Depends(require_principal),
 ) -> Call:
     settings = get_settings()
     if not settings.telnyx_api_key or not settings.telnyx_connection_id:
@@ -75,7 +75,9 @@ async def create_phone_call(
     await db.refresh(call)
 
     token = mint_ws_token(call.id)
-    stream_url = f"{settings.public_ws_base_url}/v1/telephony/telnyx/media?call_id={call.id}&token={token}"
+    stream_url = (
+        f"{settings.public_ws_base_url}/v1/telephony/telnyx/media?call_id={call.id}&token={token}"
+    )
     webhook_url = f"{settings.public_base_url}/v1/webhooks/telnyx"
 
     telnyx = _telnyx_client_factory()
@@ -86,7 +88,9 @@ async def create_phone_call(
             webhook_url=webhook_url,
             stream_url=stream_url,
         )
-        provider_id = (resp.get("data") or {}).get("call_control_id") or (resp.get("data") or {}).get("id")
+        provider_id = (resp.get("data") or {}).get("call_control_id") or (
+            resp.get("data") or {}
+        ).get("id")
         if provider_id:
             call.provider_call_id = provider_id
         call.status = CallStatus.ringing
@@ -109,7 +113,7 @@ async def create_phone_call(
 async def create_web_call(
     body: WebCallCreate,
     db: AsyncSession = Depends(get_db),
-    p: Principal = Depends(require_api_key),
+    p: AuthedPrincipal = Depends(require_principal),
 ) -> WebCallCreated:
     ag = await _agent_or_404(db, p.org.id, body.agent_id)
     call = Call(
@@ -136,7 +140,7 @@ async def create_web_call(
 @router.get("", response_model=CallListPage)
 async def list_calls(
     db: AsyncSession = Depends(get_db),
-    p: Principal = Depends(require_api_key),
+    p: AuthedPrincipal = Depends(require_principal),
     agent_id: str | None = Query(default=None),
     status_filter: str | None = Query(default=None, alias="status"),
     direction: str | None = Query(default=None),
@@ -166,16 +170,14 @@ async def list_calls(
         try:
             import base64
             from datetime import datetime as _dt
+
             padded = cursor + "=" * (-len(cursor) % 4)
             decoded = base64.urlsafe_b64decode(padded.encode()).decode()
             ts_str, last_id = decoded.split("|", 1)
             ts = _dt.fromisoformat(ts_str)
         except (ValueError, UnicodeDecodeError) as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid cursor") from exc
-        stmt = stmt.where(
-            (Call.created_at < ts)
-            | ((Call.created_at == ts) & (Call.id < last_id))
-        )
+        stmt = stmt.where((Call.created_at < ts) | ((Call.created_at == ts) & (Call.id < last_id)))
 
     stmt = stmt.order_by(Call.created_at.desc(), Call.id.desc()).limit(limit + 1)
     rows = (await db.execute(stmt)).scalars().all()
@@ -194,6 +196,7 @@ async def list_calls(
     next_cursor: str | None = None
     if has_more and page_rows:
         import base64
+
         last = page_rows[-1]
         raw = f"{last.created_at.isoformat()}|{last.id}"
         next_cursor = base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
@@ -204,7 +207,7 @@ async def list_calls(
 async def get_call(
     call_id: str,
     db: AsyncSession = Depends(get_db),
-    p: Principal = Depends(require_api_key),
+    p: AuthedPrincipal = Depends(require_principal),
 ) -> Call:
     call = (
         await db.execute(select(Call).where(Call.id == call_id, Call.org_id == p.org.id))
@@ -214,11 +217,43 @@ async def get_call(
     return call
 
 
+@router.get("/{call_id}/recording-url")
+async def get_call_recording_url(
+    call_id: str,
+    db: AsyncSession = Depends(get_db),
+    p: AuthedPrincipal = Depends(require_principal),
+) -> dict[str, object]:
+    """Return a short-lived presigned URL the browser can GET directly.
+
+    Avoids streaming the audio through this process for each playback. If
+    object store is disabled, returns `{"url": null}` — frontend falls back
+    to the bearer-protected blob endpoint.
+    """
+    call = (
+        await db.execute(select(Call).where(Call.id == call_id, Call.org_id == p.org.id))
+    ).scalar_one_or_none()
+    if not call:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "call not found")
+    if not call.recording_s3_key:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no recording for this call")
+
+    from app.storage.s3 import presign_get_url  # local import: storage is optional
+
+    expires_in = 600
+    url = await presign_get_url(
+        bucket=get_settings().s3_bucket_recordings,
+        key=call.recording_s3_key,
+        expires_in=expires_in,
+        content_type="audio/wav",
+    )
+    return {"url": url, "expires_in": expires_in}
+
+
 @router.get("/{call_id}/recording")
 async def get_call_recording(
     call_id: str,
     db: AsyncSession = Depends(get_db),
-    p: Principal = Depends(require_api_key),
+    p: AuthedPrincipal = Depends(require_principal),
 ) -> "StreamingResponse":
     """Stream the call's WAV recording bytes from object storage."""
     call = (
@@ -247,10 +282,14 @@ async def get_call_recording(
     )
 
 
-async def _principal_via_bearer(
+async def _org_via_bearer(
     authorization: str | None,
     db: AsyncSession,
-) -> Principal | None:
+) -> str | None:
+    """Bearer-only auth shortcut for routes that EventSource can't reach
+    (SSE can't send Authorization headers, so the stream endpoint also
+    supports a signed `?token=`). Returns the org id, not a full Principal,
+    because nothing here needs the api_key row."""
     if not authorization or not authorization.lower().startswith("bearer "):
         return None
     raw = authorization.split(" ", 1)[1].strip()
@@ -265,15 +304,15 @@ async def _principal_via_bearer(
     ).first()
     if not row:
         return None
-    api_key, org = row
-    return Principal(org=org, api_key=api_key)
+    _api_key, org = row
+    return org.id
 
 
 @router.post("/{call_id}/stream-token", response_model=StreamTokenOut)
 async def mint_stream_token(
     call_id: str,
     db: AsyncSession = Depends(get_db),
-    p: Principal = Depends(require_api_key),
+    p: AuthedPrincipal = Depends(require_principal),
 ) -> StreamTokenOut:
     """Mint a short-lived (5 min) token bound to this call+org for the SSE stream.
 
@@ -304,9 +343,7 @@ async def stream_call_events(
     """
     org_id: str | None = None
     if authorization:
-        principal = await _principal_via_bearer(authorization, db)
-        if principal:
-            org_id = principal.org.id
+        org_id = await _org_via_bearer(authorization, db)
     if org_id is None and token:
         org_id = verify_sse_token(token, call_id=call_id)
         if org_id is None:

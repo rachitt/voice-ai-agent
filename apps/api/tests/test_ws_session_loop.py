@@ -14,7 +14,6 @@ import json
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -50,9 +49,7 @@ class FakePipeline:
         self.fed.append((text, is_final))
         if is_final:
             # echo back as a tiny agent reply so _emit fires
-            await self._q.put(
-                PipelineEvent(kind="agent_text", text=f"echo:{text}", is_final=True)
-            )
+            await self._q.put(PipelineEvent(kind="agent_text", text=f"echo:{text}", is_final=True))
 
     async def events(self) -> AsyncIterator[PipelineEvent]:
         while True:
@@ -68,7 +65,7 @@ class FakePipeline:
 class FakeDG:
     """Drop-in DeepgramStream for the PSTN session pump."""
 
-    instances: list["FakeDG"] = []
+    instances: list[FakeDG] = []
 
     def __init__(self, *, sample_rate: int = 16000) -> None:
         self.sample_rate = sample_rate
@@ -76,7 +73,7 @@ class FakeDG:
         self.closed = False
         FakeDG.instances.append(self)
 
-    async def __aenter__(self) -> "FakeDG":
+    async def __aenter__(self) -> FakeDG:
         return self
 
     async def __aexit__(self, *_):
@@ -185,7 +182,9 @@ def _await_call_state(
     return last
 
 
-async def _seed_call_async(url: str, *, direction: str, status: str, first_message: str | None) -> str:
+async def _seed_call_async(
+    url: str, *, direction: str, status: str, first_message: str | None
+) -> str:
     import uuid as _u
 
     eng = create_async_engine(url, pool_pre_ping=True)
@@ -218,7 +217,7 @@ async def _seed_call_async(url: str, *, direction: str, status: str, first_messa
                     " vad_silence_ms, tools, knowledge_base_ids, dynamic_variables, "
                     " created_at, updated_at) "
                     "VALUES (:id, :ag, 1, 'draft', :fm, 'be brief', "
-                    " 'gemini-2.0-flash', 'eleven_flash_v2_5', 'deepgram-nova-3', 'en', "
+                    " 'gemini/gemini-3.1-flash-lite', '21m00Tcm4TlvDq8ikWAM', 'deepgram-nova-3', 'en', "
                     " 0.5, 700, '[]'::jsonb, '[]'::jsonb, '{}'::jsonb, :ts, :ts)"
                 ),
                 {"id": ver_id, "ag": agent_id, "fm": first_message, "ts": now},
@@ -360,9 +359,7 @@ def test_web_call_ws_text_only_full_session(patch_ws_runtime, seeded_web_call_sy
     call_id = seeded_web_call_sync
     token = mint_ws_token(call_id)
     with TestClient(create_app()) as tc:
-        with tc.websocket_connect(
-            f"/v1/calls/{call_id}/ws?token={token}&text_only=true"
-        ) as ws:
+        with tc.websocket_connect(f"/v1/calls/{call_id}/ws?token={token}&text_only=true") as ws:
             ev1 = ws.receive_json()
             assert ev1["type"] == "started"
             ev2 = ws.receive_json()
@@ -386,9 +383,7 @@ def test_web_call_ws_skips_invalid_json_text(seeded_web_call_sync):
     call_id = seeded_web_call_sync
     token = mint_ws_token(call_id)
     with TestClient(create_app()) as tc:
-        with tc.websocket_connect(
-            f"/v1/calls/{call_id}/ws?token={token}&text_only=true"
-        ) as ws:
+        with tc.websocket_connect(f"/v1/calls/{call_id}/ws?token={token}&text_only=true") as ws:
             ws.receive_json()  # started
             ws.receive_json()  # first message
             ws.send_text("not-json")
@@ -418,9 +413,7 @@ def test_web_call_ws_pushes_binary_frame_to_stt(seeded_web_call_sync):
 def test_telnyx_ws_rejects_bad_token(patch_ws_runtime):
     with TestClient(create_app()) as tc:
         with pytest.raises(Exception):
-            with tc.websocket_connect(
-                "/v1/telephony/telnyx/media?call_id=call_x&token=bad"
-            ):
+            with tc.websocket_connect("/v1/telephony/telnyx/media?call_id=call_x&token=bad"):
                 pass
 
 
@@ -453,13 +446,9 @@ def test_telnyx_ws_handles_start_media_stop(patch_ws_runtime, seeded_pstn_call_s
             ws.send_text(
                 json.dumps({"event": "start", "start": {"streamId": "s1", "callSid": "cc_x"}})
             )
-            ws.send_text(
-                json.dumps({"event": "media", "media": {"payload": ulaw_payload}})
-            )
+            ws.send_text(json.dumps({"event": "media", "media": {"payload": ulaw_payload}}))
             # garbage payload exercises decode error path
-            ws.send_text(
-                json.dumps({"event": "media", "media": {"payload": "!!!not-b64!!!"}})
-            )
+            ws.send_text(json.dumps({"event": "media", "media": {"payload": "!!!not-b64!!!"}}))
             # not-json line exercises decode-error continue
             ws.send_text("totally-not-json")
             # Receive the started envelope to give the server a sync point.
@@ -468,7 +457,9 @@ def test_telnyx_ws_handles_start_media_stop(patch_ws_runtime, seeded_pstn_call_s
             ws.send_text(json.dumps({"event": "stop"}))
             with pytest.raises(WebSocketDisconnect):
                 ws.receive_text()
-    status, kinds = _await_call_state(patch_ws_runtime, call_id, expected_status="completed", timeout=8.0)
+    status, kinds = _await_call_state(
+        patch_ws_runtime, call_id, expected_status="completed", timeout=8.0
+    )
     assert status == "completed", f"got status={status} kinds={kinds}"
     assert "telnyx.media.closed" in kinds
     assert any(dg.pushed for dg in FakeDG.instances)

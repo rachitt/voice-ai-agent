@@ -12,6 +12,7 @@ SDKs use API keys via /v1/api-keys/...
 
 State + nonce live in short-lived signed cookies so we stay stateless.
 """
+
 from __future__ import annotations
 
 import secrets
@@ -30,13 +31,16 @@ from fastapi import (  # noqa: F401
     status,
 )
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.csrf import CSRF_COOKIE, new_csrf_token, set_csrf_cookie
 from app.core.logging import log
+from app.core.security import hash_api_key
 from app.core.sessions import mint_session, verify_session
-from app.db.models import Org, User
+from app.db.models import ApiKey, Org, User
 from app.db.session import get_db
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
@@ -86,8 +90,12 @@ async def login_google() -> RedirectResponse:
     }
     resp = RedirectResponse(url=f"{GOOGLE_AUTH}?{urlencode(params)}", status_code=302)
     resp.set_cookie(
-        STATE_COOKIE, state,
-        max_age=600, httponly=True, samesite="lax", secure=_secure_cookie(),
+        STATE_COOKIE,
+        state,
+        max_age=600,
+        httponly=True,
+        samesite="lax",
+        secure=_secure_cookie(),
     )
     return resp
 
@@ -118,7 +126,9 @@ async def callback_google(
             },
         )
         if token_resp.status_code != 200:
-            log.warning("oauth.token.err", status=token_resp.status_code, body=token_resp.text[:200])
+            log.warning(
+                "oauth.token.err", status=token_resp.status_code, body=token_resp.text[:200]
+            )
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, "token exchange failed")
         access_token = token_resp.json().get("access_token")
         if not access_token:
@@ -151,6 +161,7 @@ async def callback_google(
         secure=_secure_cookie(),
         path="/",
     )
+    set_csrf_cookie(resp, new_csrf_token(), secure=_secure_cookie())
     resp.delete_cookie(STATE_COOKIE, path="/")
     return resp
 
@@ -158,6 +169,7 @@ async def callback_google(
 @router.get("/me")
 async def me(
     request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     s = get_settings()
@@ -171,6 +183,13 @@ async def me(
     if not user:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user gone")
     org = await db.get(Org, user.org_id)
+
+    # Ensure a CSRF cookie exists for older sessions that pre-date the
+    # CSRF rollout. Mint on the fly + echo via the response body.
+    csrf = request.cookies.get(CSRF_COOKIE)
+    if not csrf:
+        csrf = new_csrf_token()
+        set_csrf_cookie(response, csrf, secure=_secure_cookie())
     return {
         "user": {
             "id": user.id,
@@ -179,6 +198,7 @@ async def me(
             "avatar_url": user.avatar_url,
         },
         "org": {"id": org.id, "name": org.name, "slug": org.slug} if org else None,
+        "csrf_token": csrf,
     }
 
 
@@ -192,7 +212,84 @@ async def logout(response: Response) -> dict[str, bool]:
         httponly=True,
         samesite="lax",
     )
+    response.delete_cookie(CSRF_COOKIE, path="/", samesite="lax")
     return {"ok": True}
+
+
+class ApiKeyExchangeIn(BaseModel):
+    api_key: str = Field(min_length=8, max_length=128)
+
+
+@router.post("/session/api-key")
+async def exchange_api_key_for_session(
+    body: ApiKeyExchangeIn,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Exchange a long-lived API key for an httpOnly session cookie.
+
+    Lets the dashboard avoid storing the API key in localStorage (XSS risk)
+    while still bootstrapping without a full Google OAuth setup. The minted
+    cookie is identical to the OAuth-issued one — same TTL, same flags —
+    so middleware / `require_session` doesn't need to know the difference.
+
+    A synthetic "service" user is auto-provisioned per org if none exists,
+    so the session JWT always points at a real `User` row.
+    """
+    raw = body.api_key.strip()
+    if not raw:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "empty api key")
+
+    row = (
+        await db.execute(
+            select(ApiKey, Org)
+            .join(Org, Org.id == ApiKey.org_id)
+            .where(ApiKey.key_hash == hash_api_key(raw), ApiKey.revoked_at.is_(None))
+        )
+    ).first()
+    if not row:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid api key")
+    api_key, org = row
+
+    # Prefer the org's first real user (OAuth-provisioned). Fall back to a
+    # synthetic one so API-key-bootstrap envs without Google OAuth still work.
+    user = (
+        await db.execute(
+            select(User).where(User.org_id == org.id).order_by(User.created_at.asc()).limit(1)
+        )
+    ).scalar_one_or_none()
+    if not user:
+        user = User(
+            org_id=org.id,
+            email=f"service@{org.slug or 'org'}.local",
+            name="API Service",
+            google_sub=None,
+        )
+        db.add(user)
+        await db.flush()
+
+    api_key.last_used_at = datetime.now(UTC)
+    user.last_login_at = datetime.now(UTC)
+    await db.commit()
+
+    s = get_settings()
+    cookie_value = mint_session(user.id, org.id)
+    response.set_cookie(
+        s.session_cookie_name,
+        cookie_value,
+        max_age=s.session_ttl_seconds,
+        httponly=True,
+        samesite="lax",
+        secure=_secure_cookie(),
+        path="/",
+    )
+    csrf = new_csrf_token()
+    set_csrf_cookie(response, csrf, secure=_secure_cookie())
+    return {
+        "user": {"id": user.id, "email": user.email, "name": user.name},
+        "org": {"id": org.id, "name": org.name, "slug": org.slug},
+        "csrf_token": csrf,
+    }
 
 
 async def _upsert_user(db: AsyncSession, *, info: dict[str, Any]) -> User:
@@ -202,9 +299,7 @@ async def _upsert_user(db: AsyncSession, *, info: dict[str, Any]) -> User:
     picture = info.get("picture")
 
     # 1. Match by google_sub
-    user = (
-        await db.execute(select(User).where(User.google_sub == sub))
-    ).scalar_one_or_none()
+    user = (await db.execute(select(User).where(User.google_sub == sub))).scalar_one_or_none()
     if user:
         user.last_login_at = datetime.now(UTC)
         if name and not user.name:
@@ -216,9 +311,7 @@ async def _upsert_user(db: AsyncSession, *, info: dict[str, Any]) -> User:
         return user
 
     # 2. Match by email — bind google_sub on first OAuth login
-    user = (
-        await db.execute(select(User).where(User.email == email))
-    ).scalar_one_or_none()
+    user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
     if user:
         user.google_sub = sub
         user.last_login_at = datetime.now(UTC)
@@ -234,9 +327,7 @@ async def _upsert_user(db: AsyncSession, *, info: dict[str, Any]) -> User:
     base_slug = _slugify(email.split("@", 1)[0])
     org_slug = base_slug
     for _ in range(20):
-        exists = (
-            await db.execute(select(Org).where(Org.slug == org_slug))
-        ).scalar_one_or_none()
+        exists = (await db.execute(select(Org).where(Org.slug == org_slug))).scalar_one_or_none()
         if not exists:
             break
         org_slug = f"{base_slug}-{secrets.token_hex(2)}"

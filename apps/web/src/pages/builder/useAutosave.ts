@@ -42,6 +42,8 @@ export function useAutosave(agentId: string) {
           model_id: agentMeta.modelId,
           voice_id: agentMeta.voiceId,
           flow_graph: { nodes, edges },
+          analysis_plan: agentMeta.analysisPlan,
+          dynamic_variables: agentMeta.dynamicVariables,
         })
         setAgentMetaFields({ versionId: next.id, versionNumber: next.version })
         setSaveStatus('saved')

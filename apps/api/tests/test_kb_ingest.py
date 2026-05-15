@@ -1,4 +1,5 @@
 """KB loaders + /knowledge-bases/{id}/sources/upload integration."""
+
 from __future__ import annotations
 
 import io
@@ -81,9 +82,7 @@ async def test_upload_txt_ingests_and_chunks(client, auth_headers, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_upload_unsupported_kind_415(client, auth_headers):
-    r = await client.post(
-        "/v1/knowledge-bases", json={"name": "X"}, headers=auth_headers
-    )
+    r = await client.post("/v1/knowledge-bases", json={"name": "X"}, headers=auth_headers)
     kb_id = r.json()["id"]
     files = {"file": ("song.mp3", b"\x00\x01\x02", "audio/mpeg")}
     r = await client.post(
@@ -96,9 +95,7 @@ async def test_upload_unsupported_kind_415(client, auth_headers):
 
 @pytest.mark.asyncio
 async def test_upload_empty_file_400(client, auth_headers):
-    r = await client.post(
-        "/v1/knowledge-bases", json={"name": "Y"}, headers=auth_headers
-    )
+    r = await client.post("/v1/knowledge-bases", json={"name": "Y"}, headers=auth_headers)
     kb_id = r.json()["id"]
     files = {"file": ("empty.txt", b"", "text/plain")}
     r = await client.post(

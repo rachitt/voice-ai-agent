@@ -156,9 +156,7 @@ async def test_webhook_call_answered_updates_status(
     }
     await client.post("/v1/webhooks/telnyx", json=init)
     # Now send answered.
-    answered = {
-        "data": {"event_type": "call.answered", "payload": {"call_control_id": cc}}
-    }
+    answered = {"data": {"event_type": "call.answered", "payload": {"call_control_id": cc}}}
     r = await client.post("/v1/webhooks/telnyx", json=answered)
     assert r.status_code == 204
 

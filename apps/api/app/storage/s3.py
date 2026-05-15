@@ -4,6 +4,7 @@ Gated by `enable_object_store` so test/dev environments without MinIO running
 behave as before. Uses boto3's sync client off a thread to keep the request
 event loop responsive on large uploads.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -77,3 +78,32 @@ async def put_object_bytes(
 async def get_object_bytes(*, bucket: str, key: str) -> bytes:
     """Fetch object bytes. Raises on failure — caller must handle."""
     return await asyncio.to_thread(_get_sync, bucket, key)
+
+
+def _presign_get_sync(bucket: str, key: str, expires_in: int, content_type: str | None) -> str:
+    client = get_s3_client()
+    params: dict[str, str | int] = {"Bucket": bucket, "Key": key}
+    if content_type:
+        params["ResponseContentType"] = content_type
+    return client.generate_presigned_url("get_object", Params=params, ExpiresIn=expires_in)
+
+
+async def presign_get_url(
+    *,
+    bucket: str,
+    key: str,
+    expires_in: int = 600,
+    content_type: str | None = None,
+) -> str | None:
+    """Generate a short-lived presigned GET URL.
+
+    Returns None if `enable_object_store` is false or signing fails — callers
+    fall back to streaming via the bearer-protected blob endpoint.
+    """
+    if not get_settings().enable_object_store:
+        return None
+    try:
+        return await asyncio.to_thread(_presign_get_sync, bucket, key, expires_in, content_type)
+    except Exception as exc:
+        log.warning("s3.presign.err", bucket=bucket, key=key, err=str(exc))
+        return None

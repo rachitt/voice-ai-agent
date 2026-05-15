@@ -1,4 +1,5 @@
 """CallRecorder unit tests + recording download endpoint."""
+
 from __future__ import annotations
 
 import io
@@ -91,9 +92,7 @@ async def test_recording_endpoint_404_without_key(client, auth_headers, db_sessi
 
 
 @pytest.mark.asyncio
-async def test_recording_endpoint_streams_bytes(
-    client, auth_headers, db_session, monkeypatch
-):
+async def test_recording_endpoint_streams_bytes(client, auth_headers, db_session, monkeypatch):
     r = await client.post(
         "/v1/agents", json={"name": "A2", "first_message": "Hi"}, headers=auth_headers
     )
@@ -116,6 +115,7 @@ async def test_recording_endpoint_streams_bytes(
         return b"RIFF\x00\x00\x00\x00WAVEfake"
 
     import app.storage.s3 as s3_mod
+
     monkeypatch.setattr(s3_mod, "get_object_bytes", fake_get)
 
     r = await client.get(f"/v1/calls/{call_id}/recording", headers=auth_headers)

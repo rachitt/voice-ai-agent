@@ -7,6 +7,7 @@ Status transitions: queued → ingesting → ready | error.
 Run the worker:
     uv run arq app.workers.kb_ingest.WorkerSettings
 """
+
 from __future__ import annotations
 
 from typing import Any

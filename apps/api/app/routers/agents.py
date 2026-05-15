@@ -3,7 +3,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.auth import Principal, require_api_key
+from app.core.auth import AuthedPrincipal, require_principal
 from app.db.models import Agent, AgentEnv, AgentVersion
 from app.db.session import get_db
 from app.schemas.agents import (
@@ -14,6 +14,7 @@ from app.schemas.agents import (
     AgentVersionOut,
     PublishIn,
 )
+from app.schemas.analysis_plan_validator import validate_analysis_plan
 from app.schemas.flow_graph_validators import validate_flow_graph
 
 router = APIRouter(prefix="/v1/agents", tags=["agents"])
@@ -23,7 +24,7 @@ router = APIRouter(prefix="/v1/agents", tags=["agents"])
 async def create_agent(
     body: AgentCreate,
     db: AsyncSession = Depends(get_db),
-    p: Principal = Depends(require_api_key),
+    p: AuthedPrincipal = Depends(require_principal),
 ) -> Agent:
     agent = Agent(org_id=p.org.id, name=body.name)
     db.add(agent)
@@ -43,13 +44,17 @@ async def create_agent(
 @router.get("", response_model=list[AgentOut])
 async def list_agents(
     db: AsyncSession = Depends(get_db),
-    p: Principal = Depends(require_api_key),
+    p: AuthedPrincipal = Depends(require_principal),
 ) -> list[Agent]:
     rows = (
-        await db.execute(
-            select(Agent).where(Agent.org_id == p.org.id).order_by(Agent.created_at.desc())
+        (
+            await db.execute(
+                select(Agent).where(Agent.org_id == p.org.id).order_by(Agent.created_at.desc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return list(rows)
 
 
@@ -57,7 +62,7 @@ async def list_agents(
 async def get_agent(
     agent_id: str,
     db: AsyncSession = Depends(get_db),
-    p: Principal = Depends(require_api_key),
+    p: AuthedPrincipal = Depends(require_principal),
 ) -> Agent:
     agent = (
         await db.execute(
@@ -84,6 +89,7 @@ _VERSION_FIELDS = (
     "tools",
     "knowledge_base_ids",
     "analysis_plan",
+    "dynamic_variables",
     "server_url",
 )
 
@@ -105,6 +111,7 @@ def _clone_version(src: AgentVersion, *, version: int, env: str) -> AgentVersion
         tools=list(src.tools or []),
         knowledge_base_ids=list(src.knowledge_base_ids or []),
         analysis_plan=src.analysis_plan,
+        dynamic_variables=dict(src.dynamic_variables or {}),
         server_url=src.server_url,
     )
 
@@ -114,7 +121,7 @@ async def update_agent(
     agent_id: str,
     body: AgentUpdate,
     db: AsyncSession = Depends(get_db),
-    p: Principal = Depends(require_api_key),
+    p: AuthedPrincipal = Depends(require_principal),
 ) -> AgentVersion:
     agent = (
         await db.execute(select(Agent).where(Agent.id == agent_id, Agent.org_id == p.org.id))
@@ -147,6 +154,13 @@ async def update_agent(
         db.add(draft)
 
     patch = body.model_dump(exclude={"name"}, exclude_unset=True)
+    if "analysis_plan" in patch:
+        ap_errors = validate_analysis_plan(patch["analysis_plan"])
+        if ap_errors:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                {"errors": ap_errors, "field": "analysis_plan"},
+            )
     for k, v in patch.items():
         if k in _VERSION_FIELDS:
             setattr(draft, k, v)
@@ -161,7 +175,7 @@ async def publish_agent(
     agent_id: str,
     body: PublishIn,
     db: AsyncSession = Depends(get_db),
-    p: Principal = Depends(require_api_key),
+    p: AuthedPrincipal = Depends(require_principal),
 ) -> Agent:
     agent = (
         await db.execute(
@@ -190,6 +204,13 @@ async def publish_agent(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 {"errors": result.errors, "warnings": result.warnings},
             )
+
+    ap_errors = validate_analysis_plan(ver.analysis_plan)
+    if ap_errors:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            {"errors": ap_errors, "field": "analysis_plan"},
+        )
 
     await db.execute(update(AgentVersion).where(AgentVersion.id == ver.id).values(env=body.env))
     agent.published_version_id = ver.id

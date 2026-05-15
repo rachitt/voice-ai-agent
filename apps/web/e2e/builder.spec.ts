@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test'
 import type { BuilderHandle, BuilderEdge } from './_builder-handle'
+import { mockAuthed } from './_auth'
 
 test.describe('Agent Builder', () => {
   test.beforeEach(async ({ page }) => {
+    await mockAuthed(page)
     await page.goto('/builder/demo')
     await expect(page.getByTestId('builder-root')).toBeVisible()
   })
@@ -63,13 +65,6 @@ test.describe('Agent Builder', () => {
     const input = page.getByTestId('prompt-input')
     await input.fill('Howdy partner!')
     await expect(greet).toContainText('Howdy partner!')
-  })
-
-  test('retry policy toggle activates exclusively', async ({ page }) => {
-    await page.locator('[data-testid="step-node"][data-node-id="greet"]').click()
-    await page.getByTestId('retry-linear').click()
-    await expect(page.getByTestId('retry-linear')).toHaveAttribute('data-active', '1')
-    await expect(page.getByTestId('retry-exponential')).toHaveAttribute('data-active', '0')
   })
 
   test('palette search filters', async ({ page }) => {

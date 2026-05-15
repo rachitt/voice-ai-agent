@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Copy, Key, Plus, RefreshCw, Trash2 } from 'lucide-react'
-import { apiKeys, type ApiKeyRow } from '@/lib/api'
+import { useSearchParams } from 'react-router-dom'
+import { Calendar, CheckCircle2, Copy, Key, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { apiKeys, getApiBase, integrations, type ApiKeyRow, type IntegrationStatus } from '@/lib/api'
 import { useAuth } from '@/lib/useAuth'
 import { ApiErrorBanner } from '@/components/ApiErrorBanner'
 
@@ -10,8 +11,126 @@ export function SettingsPage() {
   if (!signedIn) return <SignedOut />
   return (
     <div className="flex flex-col gap-6" data-testid="settings-root">
+      <IntegrationsSection />
       <ApiKeysSection />
     </div>
+  )
+}
+
+function IntegrationsSection() {
+  const [status, setStatus] = useState<IntegrationStatus | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [params, setParams] = useSearchParams()
+  const justConnected = params.get('connected') === 'google_calendar'
+  const oauthError = params.get('error')
+
+  const load = useCallback(async () => {
+    setErr(null)
+    try {
+      setStatus(await integrations.googleCalendarStatus())
+    } catch (e) {
+      setErr(String(e))
+    }
+  }, [])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot mount fetch
+    void load()
+  }, [load])
+
+  useEffect(() => {
+    if (justConnected || oauthError) {
+      // Clean the URL after acknowledging the redirect — keeps state idempotent.
+      const next = new URLSearchParams(params)
+      next.delete('connected')
+      next.delete('error')
+      setParams(next, { replace: true })
+    }
+  }, [justConnected, oauthError, params, setParams])
+
+  const connect = () => {
+    // Full-page redirect — survives the round-trip + lets Google plant the
+    // session-state cookie correctly. Cross-origin (api ≠ web) requires
+    // same-site=lax cookies, which window.location.assign respects.
+    window.location.assign(`${getApiBase()}/v1/integrations/google/calendar/connect`)
+  }
+
+  const disconnect = async () => {
+    setBusy(true)
+    setErr(null)
+    try {
+      await integrations.disconnectGoogleCalendar()
+      await load()
+    } catch (e) {
+      setErr(String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="panel p-5" data-testid="integrations-section">
+      <header className="mb-4 flex items-center gap-3">
+        <Calendar className="h-4 w-4 text-accent" />
+        <h2 className="text-sm font-medium">Integrations</h2>
+      </header>
+      <ApiErrorBanner err={err} />
+      {justConnected && (
+        <div className="mb-3 rounded-[8px] border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-200">
+          Google Calendar connected. Your `book_meeting` tool now writes to this account.
+        </div>
+      )}
+      {oauthError && (
+        <div className="mb-3 rounded-[8px] border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-200">
+          OAuth failed: {oauthError}
+        </div>
+      )}
+
+      <div
+        className="flex items-center justify-between rounded-[8px] border border-border bg-panel-2 p-3"
+        data-testid="integration-google-calendar"
+      >
+        <div className="flex items-center gap-3">
+          <div className="grid h-9 w-9 place-items-center rounded-[8px] border border-border bg-bg">
+            <Calendar className="h-4 w-4 text-muted" />
+          </div>
+          <div>
+            <div className="text-[13px] font-medium">Google Calendar</div>
+            <div className="text-[11px] text-muted">
+              {status?.connected ? (
+                <span className="inline-flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                  Connected as {status.account_email}
+                </span>
+              ) : (
+                'Connect to let agents book meetings on your calendar.'
+              )}
+            </div>
+          </div>
+        </div>
+        {status?.connected ? (
+          <button
+            type="button"
+            data-testid="disconnect-google-calendar"
+            onClick={disconnect}
+            disabled={busy}
+            className="rounded-[8px] border border-border bg-panel px-3 py-1.5 text-[12px] text-muted hover:border-red-500/40 hover:text-red-300 disabled:opacity-50"
+          >
+            {busy ? 'Disconnecting…' : 'Disconnect'}
+          </button>
+        ) : (
+          <button
+            type="button"
+            data-testid="connect-google-calendar"
+            onClick={connect}
+            className="rounded-[8px] border border-accent bg-accent-soft px-3 py-1.5 text-[12px] text-fg hover:bg-accent-soft/80"
+          >
+            Connect
+          </button>
+        )}
+      </div>
+    </section>
   )
 }
 

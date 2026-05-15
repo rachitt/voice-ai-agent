@@ -12,8 +12,13 @@ from app.db import models
 
 
 async def _make_call(
-    db_session, *, agent_id: str, org_id: str, status="completed",
-    direction="web", recording_s3_key: str | None = None,
+    db_session,
+    *,
+    agent_id: str,
+    org_id: str,
+    status="completed",
+    direction="web",
+    recording_s3_key: str | None = None,
 ):
     call = models.Call(
         org_id=org_id,

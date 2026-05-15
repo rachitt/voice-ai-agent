@@ -3,6 +3,7 @@
 Only stdlib + pypdf + python-docx. Streaming readers operate on in-memory
 `bytes` since uploads are bounded by FastAPI request limits anyway.
 """
+
 from __future__ import annotations
 
 import io

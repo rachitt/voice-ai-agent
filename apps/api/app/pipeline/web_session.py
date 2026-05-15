@@ -4,6 +4,7 @@ WS token: HMAC(secret, "ws:" + call_id) — deterministic, lives for the call.
 SSE token: signed payload `sse:{exp}:{call_id}:{org_id}` — TTL-bound (5 min).
 Neither requires Redis. Rotation requires rotating webhook_hmac_secret.
 """
+
 from __future__ import annotations
 
 import base64
@@ -43,7 +44,9 @@ def _sign(payload: bytes) -> str:
 SSE_TOKEN_TTL_SECONDS = 300
 
 
-def mint_sse_token(call_id: str, org_id: str, ttl_seconds: int = SSE_TOKEN_TTL_SECONDS) -> tuple[str, int]:
+def mint_sse_token(
+    call_id: str, org_id: str, ttl_seconds: int = SSE_TOKEN_TTL_SECONDS
+) -> tuple[str, int]:
     exp = int(time.time()) + ttl_seconds
     payload = f"sse:{exp}:{call_id}:{org_id}".encode()
     return f"{_b64e(payload)}.{_sign(payload)}", exp

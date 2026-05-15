@@ -1,4 +1,5 @@
 """GET /v1/calls — list + filter + keyset pagination."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -116,9 +117,7 @@ async def test_list_paginates_via_cursor(client, db_session, auth_headers):
         seen_ids.add(it["id"])
 
     # Last page
-    r = await client.get(
-        f"/v1/calls?limit=3&cursor={body['next_cursor']}", headers=auth_headers
-    )
+    r = await client.get(f"/v1/calls?limit=3&cursor={body['next_cursor']}", headers=auth_headers)
     body = r.json()
     assert len(body["items"]) == 1
     assert body["next_cursor"] is None
@@ -153,9 +152,7 @@ async def test_list_isolates_orgs(client, db_session, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_get_call_returns_detail_with_transcript(
-    client, db_session, auth_headers
-):
+async def test_get_call_returns_detail_with_transcript(client, db_session, auth_headers):
     org = (await db_session.execute(select(models.Org))).scalars().first()
     r = await client.post(
         "/v1/agents", json={"name": "D", "first_message": "Hi"}, headers=auth_headers

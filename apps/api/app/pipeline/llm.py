@@ -3,6 +3,7 @@
 LiteLLM gives us an OpenAI-compatible interface across providers (Gemini,
 OpenAI, Anthropic, Groq, etc.) so swap is just a model id change.
 """
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator

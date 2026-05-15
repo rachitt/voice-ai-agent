@@ -1,15 +1,25 @@
+import time
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import Principal, require_api_key
+from app.core.auth import AuthedPrincipal, require_principal
 from app.core.config import get_settings
 from app.core.logging import log
 from app.db.models import KbSource, KnowledgeBase
 from app.db.session import get_db
 from app.kb.loaders import UnsupportedSourceError, detect_kind, extract_text
-from app.kb.store import ingest_source_text
-from app.schemas.knowledge_bases import KbCreate, KbOut, KbSourceCreate, KbSourceOut
+from app.kb.store import ingest_source_text, search
+from app.schemas.knowledge_bases import (
+    KbCreate,
+    KbOut,
+    KbQuery,
+    KbQueryHit,
+    KbQueryResult,
+    KbSourceCreate,
+    KbSourceOut,
+)
 from app.storage.s3 import put_object_bytes
 from app.workers.kb_ingest import enqueue_kb_ingest
 
@@ -20,7 +30,7 @@ router = APIRouter(prefix="/v1/knowledge-bases", tags=["knowledge-bases"])
 async def create_kb(
     body: KbCreate,
     db: AsyncSession = Depends(get_db),
-    p: Principal = Depends(require_api_key),
+    p: AuthedPrincipal = Depends(require_principal),
 ) -> KnowledgeBase:
     kb = KnowledgeBase(org_id=p.org.id, **body.model_dump())
     db.add(kb)
@@ -32,15 +42,19 @@ async def create_kb(
 @router.get("", response_model=list[KbOut])
 async def list_kbs(
     db: AsyncSession = Depends(get_db),
-    p: Principal = Depends(require_api_key),
+    p: AuthedPrincipal = Depends(require_principal),
 ) -> list[KnowledgeBase]:
     rows = (
-        await db.execute(
-            select(KnowledgeBase)
-            .where(KnowledgeBase.org_id == p.org.id)
-            .order_by(KnowledgeBase.name)
+        (
+            await db.execute(
+                select(KnowledgeBase)
+                .where(KnowledgeBase.org_id == p.org.id)
+                .order_by(KnowledgeBase.name)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return list(rows)
 
 
@@ -49,13 +63,11 @@ async def add_source(
     kb_id: str,
     body: KbSourceCreate,
     db: AsyncSession = Depends(get_db),
-    p: Principal = Depends(require_api_key),
+    p: AuthedPrincipal = Depends(require_principal),
 ) -> KbSource:
     kb = (
         await db.execute(
-            select(KnowledgeBase).where(
-                KnowledgeBase.id == kb_id, KnowledgeBase.org_id == p.org.id
-            )
+            select(KnowledgeBase).where(KnowledgeBase.id == kb_id, KnowledgeBase.org_id == p.org.id)
         )
     ).scalar_one_or_none()
     if not kb:
@@ -76,7 +88,7 @@ async def upload_source(
     kb_id: str,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    p: Principal = Depends(require_api_key),
+    p: AuthedPrincipal = Depends(require_principal),
 ) -> KbSource:
     """Upload a file (txt/md/pdf/docx), extract text, chunk+embed inline.
 
@@ -85,9 +97,7 @@ async def upload_source(
     """
     kb = (
         await db.execute(
-            select(KnowledgeBase).where(
-                KnowledgeBase.id == kb_id, KnowledgeBase.org_id == p.org.id
-            )
+            select(KnowledgeBase).where(KnowledgeBase.id == kb_id, KnowledgeBase.org_id == p.org.id)
         )
     ).scalar_one_or_none()
     if not kb:
@@ -106,9 +116,7 @@ async def upload_source(
     settings = get_settings()
     use_async = settings.enable_async_kb_ingest and settings.enable_object_store
 
-    src = KbSource(
-        kb_id=kb_id, name=name, kind=kind, status="queued" if use_async else "ingesting"
-    )
+    src = KbSource(kb_id=kb_id, name=name, kind=kind, status="queued" if use_async else "ingesting")
     db.add(src)
     await db.commit()
     await db.refresh(src)
@@ -162,24 +170,74 @@ async def upload_source(
     return src
 
 
+@router.post("/{kb_id}/query", response_model=KbQueryResult)
+async def query_kb(
+    kb_id: str,
+    body: KbQuery,
+    db: AsyncSession = Depends(get_db),
+    p: AuthedPrincipal = Depends(require_principal),
+) -> KbQueryResult:
+    """Embed `query`, return top_k chunks with cosine scores.
+
+    Useful for debugging KB retrieval from the dashboard before connecting
+    the agent. Tenant-scoped — refuses to search KBs from other orgs.
+    """
+    kb = (
+        await db.execute(
+            select(KnowledgeBase).where(KnowledgeBase.id == kb_id, KnowledgeBase.org_id == p.org.id)
+        )
+    ).scalar_one_or_none()
+    if not kb:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "knowledge base not found")
+    k = max(1, min(int(body.top_k or 5), 20))
+    if not body.query.strip():
+        return KbQueryResult(hits=[], elapsed_ms=0)
+    started = time.perf_counter()
+    hits = await search(db, kb_id=kb_id, query=body.query, embedding_model=kb.embedding_model, k=k)
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+    if not hits:
+        return KbQueryResult(hits=[], elapsed_ms=elapsed_ms)
+    src_rows = (
+        await db.execute(
+            select(KbSource.id, KbSource.name).where(KbSource.id.in_({h.source_id for h in hits}))
+        )
+    ).all()
+    names = {sid: name for sid, name in src_rows}
+    return KbQueryResult(
+        hits=[
+            KbQueryHit(
+                chunk_id=h.chunk_id,
+                source_id=h.source_id,
+                source_name=names.get(h.source_id),
+                text=h.text,
+                score=h.score,
+            )
+            for h in hits
+        ],
+        elapsed_ms=elapsed_ms,
+    )
+
+
 @router.get("/{kb_id}/sources", response_model=list[KbSourceOut])
 async def list_sources(
     kb_id: str,
     db: AsyncSession = Depends(get_db),
-    p: Principal = Depends(require_api_key),
+    p: AuthedPrincipal = Depends(require_principal),
 ) -> list[KbSource]:
     kb = (
         await db.execute(
-            select(KnowledgeBase).where(
-                KnowledgeBase.id == kb_id, KnowledgeBase.org_id == p.org.id
-            )
+            select(KnowledgeBase).where(KnowledgeBase.id == kb_id, KnowledgeBase.org_id == p.org.id)
         )
     ).scalar_one_or_none()
     if not kb:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "knowledge base not found")
     rows = (
-        await db.execute(
-            select(KbSource).where(KbSource.kb_id == kb_id).order_by(KbSource.created_at.desc())
+        (
+            await db.execute(
+                select(KbSource).where(KbSource.kb_id == kb_id).order_by(KbSource.created_at.desc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return list(rows)

@@ -71,9 +71,7 @@ async def test_ingest_marks_error_when_kb_deleted(patched_sessionlocal, monkeypa
 
 
 @pytest.mark.asyncio
-async def test_ingest_marks_error_when_extract_raises(
-    patched_sessionlocal, monkeypatch
-):
+async def test_ingest_marks_error_when_extract_raises(patched_sessionlocal, monkeypatch):
     db = patched_sessionlocal
     org = models.Org(name="O", slug="kb-err")
     db.add(org)

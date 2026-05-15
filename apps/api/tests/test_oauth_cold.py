@@ -113,9 +113,7 @@ async def test_callback_502_on_userinfo_failure(client, oauth_configured, monkey
 
 
 @pytest.mark.asyncio
-async def test_callback_502_when_userinfo_missing_sub_email(
-    client, oauth_configured, monkeypatch
-):
+async def test_callback_502_when_userinfo_missing_sub_email(client, oauth_configured, monkeypatch):
     _stub_httpx(
         monkeypatch,
         token=_Resp(200, {"access_token": "t"}),

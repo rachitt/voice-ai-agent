@@ -94,7 +94,7 @@ jobs:
         run: |
           uv run pytest -q -n auto \
             --cov=app --cov-report=term-missing --cov-report=xml \
-            --cov-fail-under=90
+            --cov-fail-under=95
 
       - name: Upload coverage report
         if: always()
@@ -117,27 +117,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
+      # pnpm must come BEFORE setup-node so node's `cache: 'pnpm'` finds it.
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 11
           run_install: false
 
-      - name: Get pnpm store dir
-        id: pnpm-cache
-        shell: bash
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
-
-      - uses: actions/cache@v4
+      - name: Set up Node + pnpm store cache
+        uses: actions/setup-node@v4
         with:
-          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('apps/web/pnpm-lock.yaml') }}
-          restore-keys: ${{ runner.os }}-pnpm-
+          # pnpm 11 requires Node >= 22.13.
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
 
       - name: Install deps
         working-directory: apps/web

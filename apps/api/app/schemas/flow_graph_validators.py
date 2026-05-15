@@ -5,6 +5,7 @@ Mirrors apps/web/src/pages/builder/connection-rules.ts. Keep in sync.
 Used at publish-time to reject malformed agent flow graphs. Drafts via PATCH
 are NOT validated here — only when /publish runs.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -14,6 +15,8 @@ from typing import Any, Literal
 StepKind = Literal[
     "greeting",
     "collect",
+    "slot_fill",
+    "tool_call",
     "api",
     "condition",
     "transfer",
@@ -33,9 +36,17 @@ class KindRule:
     root: bool = False
 
 
+# `tool_call` and `slot_fill` can use natural-language transition labels on
+# their outbound edges; we declare a generous out_max so authors can fan out
+# into N branches the NL classifier will resolve at runtime. `allowed_labels`
+# stays empty so any user-defined branch label is accepted.
 RULES: dict[str, KindRule] = {
     "greeting": KindRule(in_allowed=False, out_max=1, root=True),
-    "collect": KindRule(in_allowed=True, out_max=1),
+    "collect": KindRule(in_allowed=True, out_max=8),
+    "slot_fill": KindRule(in_allowed=True, out_max=1),
+    "tool_call": KindRule(
+        in_allowed=True, out_max=2, out_needs_label=True, allowed_labels=("success", "error")
+    ),
     "api": KindRule(in_allowed=True, out_max=1),
     "condition": KindRule(
         in_allowed=True, out_max=2, out_needs_label=True, allowed_labels=("yes", "no")
@@ -140,9 +151,7 @@ def validate_flow_graph(graph: dict[str, Any] | None) -> FlowValidation:
         kind = nodes_by_id[src]["kind"]
         rule = RULES[kind]
         if len(outs) > rule.out_max:
-            res.errors.append(
-                f"{src} ({kind}) has {len(outs)} outbound edges (max {rule.out_max})"
-            )
+            res.errors.append(f"{src} ({kind}) has {len(outs)} outbound edges (max {rule.out_max})")
         if rule.out_needs_label:
             labels: list[str] = []
             for o in outs:

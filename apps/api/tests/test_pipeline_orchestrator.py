@@ -2,6 +2,7 @@
 
 Inject fake LLM/TTS so no external API calls happen.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -21,11 +22,13 @@ from app.pipeline.orchestrator import (
 
 # ---------- helpers ---------------------------------------------------------
 
+
 def make_text_llm(text: str, chunk_size: int = 6):
     async def _turn(*, messages, tools):
         for i in range(0, len(text), chunk_size):
             yield TextChunk(text=text[i : i + chunk_size])
         yield TurnComplete(finish_reason="stop")
+
     return _turn
 
 
@@ -36,13 +39,15 @@ def make_tool_then_text_llm(tool_name: str, tool_args: dict, follow_up: str):
         if state["phase"] == 0:
             state["phase"] = 1
             yield ToolCall(id="tc_1", name=tool_name, arguments=tool_args)
-            yield TurnComplete(finish_reason="tool_calls", tool_calls=[
-                ToolCall(id="tc_1", name=tool_name, arguments=tool_args)
-            ])
+            yield TurnComplete(
+                finish_reason="tool_calls",
+                tool_calls=[ToolCall(id="tc_1", name=tool_name, arguments=tool_args)],
+            )
             return
         for ch in follow_up.split():
             yield TextChunk(text=ch + " ")
         yield TurnComplete(finish_reason="stop")
+
     return _turn
 
 
@@ -51,10 +56,13 @@ def make_fake_tts():
         # 1 byte per char to simulate audio frames; verifies wiring
         for ch in text:
             yield ch.encode("utf-8")
+
     return _tts
 
 
-async def collect(p: Pipeline, until_kind: str = "turn_end", timeout: float = 2.0) -> list[PipelineEvent]:
+async def collect(
+    p: Pipeline, until_kind: str = "turn_end", timeout: float = 2.0
+) -> list[PipelineEvent]:
     out: list[PipelineEvent] = []
 
     async def _drain() -> None:
@@ -68,6 +76,7 @@ async def collect(p: Pipeline, until_kind: str = "turn_end", timeout: float = 2.
 
 
 # ---------- split_for_tts --------------------------------------------------
+
 
 def test_split_for_tts_basic():
     chunks, rem = split_for_tts("Hello world. How are you today? I am fine")
@@ -88,6 +97,7 @@ def test_split_for_tts_colon_break():
 
 
 # ---------- pipeline ------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_pipeline_first_message_then_user_turn():
@@ -116,7 +126,10 @@ async def test_pipeline_first_message_then_user_turn():
 
 @pytest.mark.asyncio
 async def test_pipeline_tool_dispatch_loop():
-    cfg = AgentConfig(system_prompt="x", tools=[{"type": "function", "function": {"name": "noop", "parameters": {}}}])
+    cfg = AgentConfig(
+        system_prompt="x",
+        tools=[{"type": "function", "function": {"name": "noop", "parameters": {}}}],
+    )
 
     dispatched: list[ToolCall] = []
 
@@ -169,7 +182,9 @@ async def test_pipeline_barge_in_cancels_previous_turn():
 
 @pytest.mark.asyncio
 async def test_pipeline_appends_assistant_history():
-    p = Pipeline(AgentConfig(system_prompt="sys"), llm=make_text_llm("Reply A."), tts=make_fake_tts())
+    p = Pipeline(
+        AgentConfig(system_prompt="sys"), llm=make_text_llm("Reply A."), tts=make_fake_tts()
+    )
     await p.start()
     await p.feed_user_text("hi")
     await collect(p, until_kind="turn_end")

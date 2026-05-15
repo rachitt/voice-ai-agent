@@ -1,11 +1,16 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { Shell } from './shell'
+import { AuthGate } from './AuthGate'
 import { ConsolePage } from '@/pages/console'
 import { WebCallPage } from '@/pages/web-call'
 import { SignInPage } from '@/pages/signin'
 import { SettingsPage } from '@/pages/settings'
 import { CallsPage } from '@/pages/calls'
+import { NumbersPage } from '@/pages/numbers'
+import { ToolsPage } from '@/pages/tools'
+import { KnowledgePage } from '@/pages/knowledge'
+import { AnalyticsPage } from '@/pages/analytics'
 
 const BuilderPage = lazy(() =>
   import('@/pages/builder').then((m) => ({ default: m.BuilderPage })),
@@ -19,18 +24,20 @@ export function AppRouter() {
         <Route index element={<ConsolePage />} />
         <Route path="web-call" element={<WebCallPage />} />
         <Route path="calls" element={<CallsPage />} />
-        <Route path="analytics" element={<Placeholder title="Analytics" />} />
-        <Route path="numbers" element={<Placeholder title="Numbers" />} />
-        <Route path="knowledge" element={<Placeholder title="Knowledge" />} />
-        <Route path="tools" element={<Placeholder title="Tools" />} />
+        <Route path="analytics" element={<AnalyticsPage />} />
+        <Route path="numbers" element={<NumbersPage />} />
+        <Route path="knowledge" element={<KnowledgePage />} />
+        <Route path="tools" element={<ToolsPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
       <Route
         path="builder/:agentId"
         element={
-          <Suspense fallback={<BuilderFallback />}>
-            <BuilderPage />
-          </Suspense>
+          <AuthGate>
+            <Suspense fallback={<BuilderFallback />}>
+              <BuilderPage />
+            </Suspense>
+          </AuthGate>
         }
       />
       <Route path="builder" element={<Navigate to="/builder/demo" replace />} />
@@ -47,13 +54,3 @@ function BuilderFallback() {
   )
 }
 
-function Placeholder({ title }: { title: string }) {
-  return (
-    <div className="flex h-full items-center justify-center text-muted">
-      <div className="text-center">
-        <h1 className="text-2xl text-fg">{title}</h1>
-        <p className="mt-2 text-sm">Coming soon.</p>
-      </div>
-    </div>
-  )
-}

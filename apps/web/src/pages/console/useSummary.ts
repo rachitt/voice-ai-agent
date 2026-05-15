@@ -1,16 +1,12 @@
 import { useEffect, useState } from 'react'
-import { api, type ConsoleSummary, getApiKey } from '@/lib/api'
+import { api, ApiError, type ConsoleSummary } from '@/lib/api'
 
-/** Fetch /v1/console/summary on mount; null while loading or unauthorised. */
+/** Fetch /v1/console/summary on mount; null on 401/loading so fixtures stay. */
 export function useConsoleSummary() {
   const [data, setData] = useState<ConsoleSummary | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!getApiKey()) {
-      // No API key → keep fixtures until OAuth path lands a session for SDK key
-      return
-    }
     let cancelled = false
     api
       .consoleSummary()
@@ -18,7 +14,10 @@ export function useConsoleSummary() {
         if (!cancelled) setData(s)
       })
       .catch((e) => {
-        if (!cancelled) setErr(String(e))
+        if (cancelled) return
+        // 401 just means no session yet — Shell will bounce to /signin.
+        if (e instanceof ApiError && e.status === 401) return
+        setErr(String(e))
       })
     return () => {
       cancelled = true

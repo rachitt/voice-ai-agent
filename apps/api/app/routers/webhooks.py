@@ -91,15 +91,11 @@ async def telnyx_webhook(
             call.status = CallStatus.completed
             call.ended_at = datetime.now(UTC)
             if call.started_at:
-                call.duration_ms = int(
-                    (call.ended_at - call.started_at).total_seconds() * 1000
-                )
+                call.duration_ms = int((call.ended_at - call.started_at).total_seconds() * 1000)
         await db.commit()
 
 
-async def _handle_inbound_initiated(
-    db: AsyncSession, call_payload: dict, cc_id: str
-) -> None:
+async def _handle_inbound_initiated(db: AsyncSession, call_payload: dict, cc_id: str) -> None:
     """Provision Call row + answer with media stream for an inbound PSTN call."""
     to_e164 = call_payload.get("to")
     from_e164 = call_payload.get("from")
@@ -114,9 +110,7 @@ async def _handle_inbound_initiated(
         log.warning("telnyx.inbound.no_agent_binding", to=to_e164, cc=cc_id)
         return
 
-    agent = (
-        await db.execute(select(Agent).where(Agent.id == pn.agent_id))
-    ).scalar_one_or_none()
+    agent = (await db.execute(select(Agent).where(Agent.id == pn.agent_id))).scalar_one_or_none()
     if agent is None:
         log.warning("telnyx.inbound.agent_missing", agent_id=pn.agent_id, cc=cc_id)
         return
@@ -148,8 +142,7 @@ async def _handle_inbound_initiated(
     settings = get_settings()
     token = mint_ws_token(call.id)
     stream_url = (
-        f"{settings.public_ws_base_url}/v1/telephony/telnyx/media"
-        f"?call_id={call.id}&token={token}"
+        f"{settings.public_ws_base_url}/v1/telephony/telnyx/media?call_id={call.id}&token={token}"
     )
 
     telnyx = _telnyx_client_factory()

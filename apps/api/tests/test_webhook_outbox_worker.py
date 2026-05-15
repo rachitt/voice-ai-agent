@@ -1,4 +1,5 @@
 """arq worker for webhook outbox: delivery, retries, dead-lettering, idempotency."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -62,11 +63,13 @@ async def org(db_session):
 
 
 @pytest.mark.asyncio
-async def test_deliver_webhook_marks_delivered_on_2xx(
-    patch_session, org, monkeypatch
-):
+async def test_deliver_webhook_marks_delivered_on_2xx(patch_session, org, monkeypatch):
     row = await dispatcher.enqueue(
-        patch_session, org_id=org.id, url="https://example.com/hook", event="call.completed", payload={"x": 1}
+        patch_session,
+        org_id=org.id,
+        url="https://example.com/hook",
+        event="call.completed",
+        payload={"x": 1},
     )
 
     fake = _FakeClient(status=204)
@@ -86,9 +89,7 @@ async def test_deliver_webhook_marks_delivered_on_2xx(
 
 
 @pytest.mark.asyncio
-async def test_deliver_webhook_retries_with_backoff(
-    patch_session, org, monkeypatch
-):
+async def test_deliver_webhook_retries_with_backoff(patch_session, org, monkeypatch):
     row = await dispatcher.enqueue(
         patch_session, org_id=org.id, url="https://example.com/h", event="e", payload={}
     )
@@ -108,9 +109,7 @@ async def test_deliver_webhook_retries_with_backoff(
 
 
 @pytest.mark.asyncio
-async def test_deliver_webhook_dead_after_max_attempts(
-    patch_session, org, monkeypatch
-):
+async def test_deliver_webhook_dead_after_max_attempts(patch_session, org, monkeypatch):
     row = await dispatcher.enqueue(
         patch_session, org_id=org.id, url="https://e.com", event="e", payload={}
     )
@@ -130,9 +129,7 @@ async def test_deliver_webhook_dead_after_max_attempts(
 
 
 @pytest.mark.asyncio
-async def test_deliver_webhook_idempotent_for_already_delivered(
-    patch_session, org, monkeypatch
-):
+async def test_deliver_webhook_idempotent_for_already_delivered(patch_session, org, monkeypatch):
     row = await dispatcher.enqueue(
         patch_session, org_id=org.id, url="https://e.com", event="e", payload={}
     )

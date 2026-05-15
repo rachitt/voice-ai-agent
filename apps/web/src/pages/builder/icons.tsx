@@ -9,6 +9,8 @@ import {
   Sheet,
   Cloud,
   BookOpen,
+  ListChecks,
+  Wrench,
   type LucideIcon,
 } from 'lucide-react'
 import type { StepKind } from './types'
@@ -16,6 +18,8 @@ import type { StepKind } from './types'
 export const KIND_ICON: Record<StepKind | 'sheets' | 'salesforce', LucideIcon> = {
   greeting: MessageSquare,
   collect: ClipboardList,
+  slot_fill: ListChecks,
+  tool_call: Wrench,
   api: Cable,
   condition: GitBranch,
   transfer: PhoneForwarded,
@@ -29,6 +33,8 @@ export const KIND_ICON: Record<StepKind | 'sheets' | 'salesforce', LucideIcon> =
 export const KIND_TINT: Record<StepKind, string> = {
   greeting: 'text-accent',
   collect: 'text-sky-300',
+  slot_fill: 'text-cyan-300',
+  tool_call: 'text-amber-300',
   api: 'text-violet-300',
   condition: 'text-warn',
   transfer: 'text-orange-300',

@@ -8,6 +8,7 @@ two speakers stay independently audible in playback / annotation tools.
 The recorder is mode-agnostic — both the browser WS bridge and the Telnyx
 media bridge push the same linear16-16k samples into it.
 """
+
 from __future__ import annotations
 
 import io
@@ -59,7 +60,9 @@ class CallRecorder:
             base = i * SAMPLE_WIDTH
             out = i * SAMPLE_WIDTH * 2
             interleaved[out : out + SAMPLE_WIDTH] = user[base : base + SAMPLE_WIDTH]
-            interleaved[out + SAMPLE_WIDTH : out + SAMPLE_WIDTH * 2] = agent[base : base + SAMPLE_WIDTH]
+            interleaved[out + SAMPLE_WIDTH : out + SAMPLE_WIDTH * 2] = agent[
+                base : base + SAMPLE_WIDTH
+            ]
 
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wf:

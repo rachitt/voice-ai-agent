@@ -1,4 +1,5 @@
 """Server-side flow_graph validator + publish gate."""
+
 from __future__ import annotations
 
 import pytest
@@ -30,6 +31,92 @@ def test_validator_accepts_linear_graph():
     res = validate_flow_graph(graph)
     assert res.ok, res.errors
     assert not res.warnings
+
+
+def test_validator_accepts_slot_fill_node():
+    graph = {
+        "nodes": [
+            _node("g", "greeting"),
+            _node("s", "slot_fill"),
+            _node("end", "end"),
+        ],
+        "edges": [_edge("g", "s"), _edge("s", "end")],
+    }
+    res = validate_flow_graph(graph)
+    assert res.ok, res.errors
+
+
+def test_validator_accepts_tool_call_with_success_error_labels():
+    graph = {
+        "nodes": [
+            _node("g", "greeting"),
+            _node("t", "tool_call"),
+            _node("ok", "end"),
+            _node("ko", "end"),
+        ],
+        "edges": [
+            _edge("g", "t"),
+            _edge("t", "ok", "success"),
+            _edge("t", "ko", "error"),
+        ],
+    }
+    res = validate_flow_graph(graph)
+    assert res.ok, res.errors
+
+
+def test_validator_rejects_tool_call_with_invalid_label():
+    graph = {
+        "nodes": [
+            _node("g", "greeting"),
+            _node("t", "tool_call"),
+            _node("ok", "end"),
+        ],
+        "edges": [_edge("g", "t"), _edge("t", "ok", "maybe")],
+    }
+    res = validate_flow_graph(graph)
+    assert not res.ok
+    assert any("maybe" in e for e in res.errors)
+
+
+def test_validator_rejects_tool_call_with_three_outbound():
+    graph = {
+        "nodes": [
+            _node("g", "greeting"),
+            _node("t", "tool_call"),
+            _node("a", "end"),
+            _node("b", "end"),
+            _node("c", "end"),
+        ],
+        "edges": [
+            _edge("g", "t"),
+            _edge("t", "a", "success"),
+            _edge("t", "b", "error"),
+            _edge("t", "c", "success"),
+        ],
+    }
+    res = validate_flow_graph(graph)
+    assert not res.ok
+
+
+def test_validator_accepts_collect_fan_out_for_nl_transitions():
+    """collect now supports N-way NL transitions (out_max bumped)."""
+    graph = {
+        "nodes": [
+            _node("g", "greeting"),
+            _node("c", "collect"),
+            _node("a", "end"),
+            _node("b", "end"),
+            _node("c2", "end"),
+        ],
+        "edges": [
+            _edge("g", "c"),
+            _edge("c", "a"),
+            _edge("c", "b"),
+            _edge("c", "c2"),
+        ],
+    }
+    res = validate_flow_graph(graph)
+    assert res.ok, res.errors
 
 
 def test_validator_accepts_kb_lookup_node():

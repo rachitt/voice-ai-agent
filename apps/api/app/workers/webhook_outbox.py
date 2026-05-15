@@ -15,6 +15,7 @@ Modes:
 Run the worker:
     uv run arq app.workers.webhook_outbox.WorkerSettings
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -85,13 +86,17 @@ async def pending_count() -> int:
     now = datetime.now(UTC)
     async with SessionLocal() as db:
         rows = (
-            await db.execute(
-                select(WebhookOutbox.id).where(
-                    WebhookOutbox.status == "pending",
-                    WebhookOutbox.next_attempt_at <= now,
+            (
+                await db.execute(
+                    select(WebhookOutbox.id).where(
+                        WebhookOutbox.status == "pending",
+                        WebhookOutbox.next_attempt_at <= now,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         return len(rows)
 
 

@@ -88,7 +88,12 @@ async def test_presign_get_url_returns_url_when_enabled(monkeypatch):
         bucket="b", key="rec/wav", expires_in=120, content_type="audio/wav"
     )
     assert url == "https://s3/b/rec/wav?sig=xyz"
-    assert captured == {"bucket": "b", "key": "rec/wav", "expires_in": 120, "content_type": "audio/wav"}
+    assert captured == {
+        "bucket": "b",
+        "key": "rec/wav",
+        "expires_in": 120,
+        "content_type": "audio/wav",
+    }
     cfg.get_settings.cache_clear()
 
 

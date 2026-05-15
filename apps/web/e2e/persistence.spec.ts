@@ -1,5 +1,6 @@
 import { expect, test, type Route } from '@playwright/test'
 import type { BuilderHandle } from './_builder-handle'
+import { mockAuthed } from './_auth'
 
 const API_BASE = 'http://localhost:8000'
 
@@ -19,8 +20,8 @@ function makeAgent(id: string, name: string, flowGraph: Json | null = null) {
         env: 'draft',
         first_message: 'Hi!',
         system_prompt: 'be brief',
-        model_id: 'gemini-2.0-flash',
-        voice_id: 'eleven_flash_v2_5',
+        model_id: 'gemini/gemini-3.1-flash-lite',
+        voice_id: '21m00Tcm4TlvDq8ikWAM',
         stt_id: 'deepgram-nova-3',
         language: 'en',
         interruption_sensitivity: 0.5,
@@ -37,11 +38,12 @@ function makeAgent(id: string, name: string, flowGraph: Json | null = null) {
 }
 
 test.describe('Builder ↔ API persistence', () => {
-  test.beforeEach(async ({ context }) => {
+  test.beforeEach(async ({ context, page }) => {
     await context.addInitScript(({ base }) => {
+      // localStorage only stores the non-credential API base preference now.
       localStorage.setItem('voice2.api_base', base)
-      localStorage.setItem('voice2.api_key', 'sk_test_e2e_token')
     }, { base: API_BASE })
+    await mockAuthed(page)
   })
 
   test('console lists agents from API and clicks through to builder', async ({ page }) => {
@@ -120,8 +122,8 @@ test.describe('Builder ↔ API persistence', () => {
           env: 'draft',
           first_message: 'Hi!',
           system_prompt: 'be brief',
-          model_id: 'gemini-2.0-flash',
-          voice_id: 'eleven_flash_v2_5',
+          model_id: 'gemini/gemini-3.1-flash-lite',
+          voice_id: '21m00Tcm4TlvDq8ikWAM',
           stt_id: 'deepgram-nova-3',
           language: 'en',
           interruption_sensitivity: 0.5,

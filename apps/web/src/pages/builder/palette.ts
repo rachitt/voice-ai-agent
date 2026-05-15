@@ -3,6 +3,8 @@ import type { PaletteItem } from './types'
 export const PALETTE: PaletteItem[] = [
   { kind: 'greeting', group: 'core', title: 'Greeting', subtitle: 'Opening line + tone' },
   { kind: 'collect', group: 'core', title: 'Collect Info', subtitle: 'Gather caller fields' },
+  { kind: 'slot_fill', group: 'core', title: 'Slot Fill', subtitle: 'Required fields, loop until complete' },
+  { kind: 'tool_call', group: 'core', title: 'Tool Call', subtitle: 'Fire a bound tool, branch success/error' },
   { kind: 'api', group: 'core', title: 'API Call', subtitle: 'Outbound webhook' },
   { kind: 'condition', group: 'core', title: 'Condition', subtitle: 'Branch on values' },
   { kind: 'transfer', group: 'core', title: 'Transfer', subtitle: 'Hand off to human' },

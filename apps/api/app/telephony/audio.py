@@ -7,6 +7,7 @@ bridges the two formats.
 Uses `audioop-lts` on Python ≥3.13 (where stdlib `audioop` was removed) and
 the stdlib module on 3.11/3.12. Both expose the same API.
 """
+
 from __future__ import annotations
 
 # `audioop-lts` (declared in pyproject for py>=3.13) installs under the
@@ -16,7 +17,9 @@ from __future__ import annotations
 import warnings
 
 with warnings.catch_warnings():
-    warnings.filterwarnings("ignore", category=DeprecationWarning, message=r"'audioop' is deprecated.*")
+    warnings.filterwarnings(
+        "ignore", category=DeprecationWarning, message=r"'audioop' is deprecated.*"
+    )
     import audioop  # type: ignore[import-not-found]  # noqa: E402
 
 

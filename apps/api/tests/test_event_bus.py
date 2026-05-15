@@ -1,4 +1,5 @@
 """event_bus pub/sub correctness."""
+
 from __future__ import annotations
 
 import asyncio
