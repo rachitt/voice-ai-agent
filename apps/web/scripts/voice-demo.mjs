@@ -30,9 +30,11 @@ import { existsSync } from 'node:fs'
 
 const API_BASE = process.env.API_BASE || 'http://127.0.0.1:8000'
 const WEB_BASE = process.env.WEB_BASE || 'http://localhost:5174'
-const API_KEY =
-  process.env.API_KEY ||
-  'REDACTED_API_KEY'
+const API_KEY = process.env.API_KEY
+if (!API_KEY) {
+  console.error('[fatal] API_KEY env required (e.g. sk_live_…). Get one from /settings.')
+  process.exit(1)
+}
 const WAV_PATH = process.env.WAV_PATH || '/tmp/voice_demo.wav'
 const HEADLESS = process.env.HEADLESS === '1'
 
