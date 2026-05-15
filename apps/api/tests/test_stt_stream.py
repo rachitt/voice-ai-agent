@@ -134,9 +134,7 @@ async def test_events_emits_vad_and_transcripts(monkeypatch):
         json.dumps(
             {
                 "type": "Results",
-                "channel": {
-                    "alternatives": [{"transcript": "hello world", "confidence": 0.92}]
-                },
+                "channel": {"alternatives": [{"transcript": "hello world", "confidence": 0.92}]},
                 "is_final": True,
                 "speech_final": False,
             }

@@ -605,9 +605,7 @@ class FlowExecutor:
             data={"id": f"flow_{nv.id}", "result": result},
         )
 
-        msg = self._render(
-            nv.data.get("error_message" if is_error else "success_message")
-        )
+        msg = self._render(nv.data.get("error_message" if is_error else "success_message"))
         if msg:
             await self._speak(msg)
 

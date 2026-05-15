@@ -45,9 +45,7 @@ async def test_upload_extract_failure_422(client, auth_headers, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_upload_ingest_failure_502_marks_source_error(
-    client, auth_headers, monkeypatch
-):
+async def test_upload_ingest_failure_502_marks_source_error(client, auth_headers, monkeypatch):
     """When ingest_source_text raises, status='error' is persisted and the
     route 502s. Subsequent list_sources should reflect the error state."""
     from app.routers import knowledge_bases as kb_router
@@ -108,18 +106,14 @@ async def test_upload_async_ingest_502_when_object_store_returns_none(
         assert r.status_code == 502, r.text
         assert "object store upload failed" in r.text
 
-        lst = await client.get(
-            f"/v1/knowledge-bases/{kb_id}/sources", headers=auth_headers
-        )
+        lst = await client.get(f"/v1/knowledge-bases/{kb_id}/sources", headers=auth_headers)
         assert lst.json()[0]["status"] == "error"
     finally:
         cfg.get_settings.cache_clear()
 
 
 @pytest.mark.asyncio
-async def test_upload_async_ingest_enqueues_when_object_store_ok(
-    client, auth_headers, monkeypatch
-):
+async def test_upload_async_ingest_enqueues_when_object_store_ok(client, auth_headers, monkeypatch):
     from app.core import config as cfg
     from app.routers import knowledge_bases as kb_router
 
@@ -139,9 +133,7 @@ async def test_upload_async_ingest_enqueues_when_object_store_ok(
         monkeypatch.setattr(kb_router, "put_object_bytes", ok_put)
         monkeypatch.setattr(kb_router, "enqueue_kb_ingest", fake_enqueue)
 
-        r = await client.post(
-            "/v1/knowledge-bases", json={"name": "AsyncOk"}, headers=auth_headers
-        )
+        r = await client.post("/v1/knowledge-bases", json={"name": "AsyncOk"}, headers=auth_headers)
         kb_id = r.json()["id"]
         files = {"file": ("doc.txt", b"async ingest please", "text/plain")}
         r = await client.post(
@@ -156,9 +148,7 @@ async def test_upload_async_ingest_enqueues_when_object_store_ok(
 
 
 @pytest.mark.asyncio
-async def test_query_returns_empty_hits_when_search_yields_none(
-    client, auth_headers, monkeypatch
-):
+async def test_query_returns_empty_hits_when_search_yields_none(client, auth_headers, monkeypatch):
     """`search()` returning [] hits the early empty-hits return branch."""
     from app.routers import knowledge_bases as kb_router
 

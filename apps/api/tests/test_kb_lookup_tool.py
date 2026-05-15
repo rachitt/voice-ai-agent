@@ -99,6 +99,7 @@ def test_resolve_tools_auto_binds_kb_lookup_for_bound_kb():
         flow_graph=None,
     )
     import asyncio as _aio
+
     defs, _custom = _aio.run(_resolve_tools(ver))
     names = [t["function"]["name"] for t in defs]
     assert "kb_lookup" in names
@@ -117,6 +118,7 @@ def test_resolve_tools_auto_binds_kb_lookup_for_graph_node():
         flow_graph=graph,
     )
     import asyncio as _aio
+
     defs, _custom = _aio.run(_resolve_tools(ver))
     names = [t["function"]["name"] for t in defs]
     assert "kb_lookup" in names
@@ -131,6 +133,7 @@ def test_resolve_tools_no_kb_when_neither_present():
         flow_graph={"nodes": [], "edges": []},
     )
     import asyncio as _aio
+
     defs, _custom = _aio.run(_resolve_tools(ver))
     names = [t["function"]["name"] for t in defs]
     assert "kb_lookup" not in names
@@ -146,6 +149,7 @@ def test_resolve_tools_no_duplicate_when_explicit_and_graph():
         flow_graph=graph,
     )
     import asyncio as _aio
+
     defs, _custom = _aio.run(_resolve_tools(ver))
     names = [t["function"]["name"] for t in defs]
     assert names.count("kb_lookup") == 1

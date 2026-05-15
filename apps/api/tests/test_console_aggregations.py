@@ -43,8 +43,9 @@ def test_aggregate_scores_skips_non_dict_and_non_numeric():
 
 
 def test_aggregate_scores_handles_floats():
-    out = {row["key"]: row["value"] for row in _aggregate_scores([
-        {"scores": {"knowledge": 75.5, "latency": 25.4}}
-    ])}
+    out = {
+        row["key"]: row["value"]
+        for row in _aggregate_scores([{"scores": {"knowledge": 75.5, "latency": 25.4}}])
+    }
     assert out["knowledge"] == 75  # int() truncates
     assert out["latency"] == 25

@@ -115,7 +115,7 @@ async def test_litellm_turn_handles_dict_chunks(monkeypatch):
 @pytest.mark.asyncio
 async def test_litellm_turn_malformed_tool_args_kept_raw(monkeypatch):
     async def gen():
-        yield _chunk(tool_calls=[_tc(idx=0, id="tc_x", name="t", args='not-json')])
+        yield _chunk(tool_calls=[_tc(idx=0, id="tc_x", name="t", args="not-json")])
         yield _chunk(finish_reason="tool_calls")
 
     async def fake_acompletion(**kw):
@@ -150,7 +150,7 @@ async def test_litellm_turn_default_tool_id_when_missing(monkeypatch):
     """If the provider never sends a tool-call id, we fabricate one."""
 
     async def gen():
-        yield _chunk(tool_calls=[_tc(idx=0, name="x", args='{}')])
+        yield _chunk(tool_calls=[_tc(idx=0, name="x", args="{}")])
         yield _chunk(finish_reason="tool_calls")
 
     async def fake_acompletion(**kw):

@@ -96,11 +96,7 @@ async def get_access_token(*, force_refresh: bool = False) -> str:
     """Returns a cached access token, refreshing 60s before expiry."""
     global _token_cache
     now = time.time()
-    if (
-        not force_refresh
-        and _token_cache is not None
-        and _token_cache.exp - now > 60
-    ):
+    if not force_refresh and _token_cache is not None and _token_cache.exp - now > 60:
         return _token_cache.access_token
     sa = _load_sa()
     assertion = _mint_jwt(sa, now=now)
@@ -118,9 +114,7 @@ def _reset_cache_for_tests() -> None:
 # --- per-org OAuth path -----------------------------------------------------
 
 
-async def _refresh_org_access_token(
-    db: AsyncSession, integration: OAuthIntegration
-) -> str | None:
+async def _refresh_org_access_token(db: AsyncSession, integration: OAuthIntegration) -> str | None:
     """Use the stored refresh_token to mint a fresh access_token. Persists
     the new token + expiry on the integration row. Returns None on failure.
     """

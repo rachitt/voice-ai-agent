@@ -513,9 +513,7 @@ class Pipeline:
             # provider quota exceeded — agent text only") rather than a
             # generic error toast that gets lost.
             log.warning("pipeline.tts.provider_error", err=str(exc))
-            await self._out.put(
-                PipelineEvent(kind="tts_error", data={"err": str(exc)})
-            )
+            await self._out.put(PipelineEvent(kind="tts_error", data={"err": str(exc)}))
             # Don't cache a partial waveform — would replay a truncated greeting
             # forever once the provider recovers.
             return

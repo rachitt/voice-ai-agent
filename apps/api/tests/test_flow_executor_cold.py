@@ -181,9 +181,7 @@ async def test_kb_node_skip_when_no_query_or_kb():
     # Empty query → skip.
     await fe._do_kb(_NodeView(id="x", kind="kb_lookup", data={"kb_id": "k", "query_template": ""}))
     # Empty kb_id → skip.
-    await fe._do_kb(
-        _NodeView(id="y", kind="kb_lookup", data={"query_template": "q"})
-    )
+    await fe._do_kb(_NodeView(id="y", kind="kb_lookup", data={"query_template": "q"}))
     assert calls == []
 
 
@@ -258,7 +256,9 @@ async def test_api_node_non_json_response_still_logs_note(monkeypatch):
             return real_cls(*a, **kw)
 
     monkeypatch.setattr(fe_mod.httpx, "AsyncClient", _Factory())
-    await fe._do_api(_NodeView(id="x", kind="api", data={"webhook": "https://up/api", "title": "t"}))
+    await fe._do_api(
+        _NodeView(id="x", kind="api", data={"webhook": "https://up/api", "title": "t"})
+    )
 
 
 @pytest.mark.asyncio

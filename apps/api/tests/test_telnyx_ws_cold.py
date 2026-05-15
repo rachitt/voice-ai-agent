@@ -90,9 +90,7 @@ def patch_pstn(db_engine, monkeypatch):
 
 
 def _seed_pstn(loopbound) -> str:
-    return _seed_call_sync(
-        loopbound, direction="inbound", status="ringing", first_message=None
-    )
+    return _seed_call_sync(loopbound, direction="inbound", status="ringing", first_message=None)
 
 
 def test_telnyx_ws_missing_agent_version_errors(patch_pstn, monkeypatch):
@@ -100,6 +98,7 @@ def test_telnyx_ws_missing_agent_version_errors(patch_pstn, monkeypatch):
     sends `agent_version_missing` + closes 1008."""
     monkeypatch.setattr(tmws, "DeepgramStream", _DGYields)
     call_id = _seed_pstn(patch_pstn)
+
     # Strip the agent_version row so _build_agent_config returns None.
     async def _wipe():
         from sqlalchemy.ext.asyncio import create_async_engine
@@ -107,7 +106,9 @@ def test_telnyx_ws_missing_agent_version_errors(patch_pstn, monkeypatch):
         eng = create_async_engine(patch_pstn._url, pool_pre_ping=True)
         try:
             async with eng.begin() as c:
-                await c.execute(text("UPDATE calls SET agent_version_id = NULL WHERE id = :id"), {"id": call_id})
+                await c.execute(
+                    text("UPDATE calls SET agent_version_id = NULL WHERE id = :id"), {"id": call_id}
+                )
                 await c.execute(text("DELETE FROM agent_versions"))
         finally:
             await eng.dispose()
@@ -154,9 +155,7 @@ def test_telnyx_stt_pump_feeds_finals(patch_pstn, monkeypatch):
             with pytest.raises(WebSocketDisconnect):
                 ws.receive_text()
 
-    status, kinds = _await_call_state(
-        patch_pstn, call_id, expected_status="completed", timeout=8.0
-    )
+    status, kinds = _await_call_state(patch_pstn, call_id, expected_status="completed", timeout=8.0)
     assert status == "completed"
     assert "telnyx.media.closed" in kinds
 
@@ -181,7 +180,5 @@ def test_telnyx_stt_unavailable_proceeds_without_pump(patch_pstn, monkeypatch):
             with pytest.raises(WebSocketDisconnect):
                 ws.receive_text()
 
-    status, _ = _await_call_state(
-        patch_pstn, call_id, expected_status="completed", timeout=8.0
-    )
+    status, _ = _await_call_state(patch_pstn, call_id, expected_status="completed", timeout=8.0)
     assert status == "completed"

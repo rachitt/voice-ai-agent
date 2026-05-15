@@ -56,9 +56,7 @@ class FakeRecorder:
 async def test_emit_agent_audio_sends_bytes():
     ws = FakeWS()
     log_buf: list[dict] = []
-    await wcws._emit(
-        ws, PipelineEvent(kind="agent_audio", audio=b"\x01\x02"), log_buf, "call_x"
-    )
+    await wcws._emit(ws, PipelineEvent(kind="agent_audio", audio=b"\x01\x02"), log_buf, "call_x")
     assert ws.sent_bytes == [b"\x01\x02"]
     assert ws.sent_json == []
     assert log_buf == []
@@ -146,9 +144,7 @@ async def test_emit_pstn_swallows_errors():
         async def send_text(self, _):
             raise RuntimeError("nope")
 
-    await tmws._emit_pstn(
-        Bad(), PipelineEvent(kind="agent_text", text="x"), None, "c", []
-    )
+    await tmws._emit_pstn(Bad(), PipelineEvent(kind="agent_text", text="x"), None, "c", [])
 
 
 # ----- _upload_recording (both routers) -------------------------------------
@@ -273,14 +269,16 @@ async def test_finalise_pstn_writes_call_event(db_session):
     agent = models.Agent(org_id=org.id, name="A")
     db_session.add(agent)
     await db_session.flush()
-    call = models.Call(
-        org_id=org.id, agent_id=agent.id, direction="inbound", status="in_progress"
-    )
+    call = models.Call(org_id=org.id, agent_id=agent.id, direction="inbound", status="in_progress")
     db_session.add(call)
     await db_session.commit()
     await tmws._finalise(db_session, call, [{"role": "user", "text": "hi"}])
     rows = (
-        (await db_session.execute(select(models.CallEvent).where(models.CallEvent.call_id == call.id)))
+        (
+            await db_session.execute(
+                select(models.CallEvent).where(models.CallEvent.call_id == call.id)
+            )
+        )
         .scalars()
         .all()
     )
@@ -386,9 +384,7 @@ async def test_build_agent_config_returns_none_when_no_version(db_session):
 
 
 def test_resolve_tools_string_ref():
-    ver = models.AgentVersion(
-        agent_id="ag_x", version=1, tools=["end_call"], knowledge_base_ids=[]
-    )
+    ver = models.AgentVersion(agent_id="ag_x", version=1, tools=["end_call"], knowledge_base_ids=[])
     defs, _custom = asyncio.run(wcws._resolve_tools(ver))
     names = [t["function"]["name"] for t in defs]
     assert "end_call" in names
@@ -419,9 +415,7 @@ def test_resolve_tools_custom_function_passthrough():
         "type": "function",
         "function": {"name": "lookup_acct", "parameters": {"type": "object"}},
     }
-    ver = models.AgentVersion(
-        agent_id="ag_x", version=1, tools=[custom], knowledge_base_ids=[]
-    )
+    ver = models.AgentVersion(agent_id="ag_x", version=1, tools=[custom], knowledge_base_ids=[])
     defs, _custom = asyncio.run(wcws._resolve_tools(ver))
     assert defs == [custom]
 

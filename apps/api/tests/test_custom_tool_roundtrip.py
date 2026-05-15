@@ -80,9 +80,7 @@ async def test_dispatch_http_post_passes_args_and_headers(monkeypatch):
         return httpx.Response(200, json={"echoed": "hi", "request_id": "rid_1"})
 
     _patch_httpx(monkeypatch, handler)
-    out = await wcws._dispatch_http_tool(
-        _tool(), {"msg": "hi"}, call_id="call_xyz"
-    )
+    out = await wcws._dispatch_http_tool(_tool(), {"msg": "hi"}, call_id="call_xyz")
     assert out == {"ok": True, "result": {"echoed": "hi", "request_id": "rid_1"}}
     assert captured["method"] == "POST"
     assert captured["url"] == "https://example.test/echo"
@@ -102,9 +100,7 @@ async def test_dispatch_http_get_routes_args_to_query(monkeypatch):
         return httpx.Response(200, json={"ok": 1})
 
     _patch_httpx(monkeypatch, handler)
-    await wcws._dispatch_http_tool(
-        _tool(method="GET"), {"q": "weather"}, call_id="call_q"
-    )
+    await wcws._dispatch_http_tool(_tool(method="GET"), {"q": "weather"}, call_id="call_q")
     assert captured["method"] == "GET"
     assert "q=weather" in captured["url"]
     assert captured["body"] == b""

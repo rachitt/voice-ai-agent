@@ -86,9 +86,7 @@ async def require_principal(
             if user:
                 org = await db.get(Org, user.org_id)
                 if org:
-                    return AuthedPrincipal(
-                        org=org, user=user, api_key=None, method="session"
-                    )
+                    return AuthedPrincipal(org=org, user=user, api_key=None, method="session")
 
     if authorization and authorization.lower().startswith("bearer "):
         raw = authorization.split(" ", 1)[1].strip()
@@ -109,8 +107,6 @@ async def require_principal(
                     .values(last_used_at=datetime.now(UTC))
                 )
                 await db.commit()
-                return AuthedPrincipal(
-                    org=org, user=None, api_key=api_key, method="api_key"
-                )
+                return AuthedPrincipal(org=org, user=None, api_key=api_key, method="api_key")
 
     raise HTTPException(status.HTTP_401_UNAUTHORIZED, "authentication required")

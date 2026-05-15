@@ -390,6 +390,7 @@ async def test_collect_single_outbound_no_classifier_call():
 @pytest.mark.asyncio
 async def test_tool_call_dispatch_raises_routes_to_error():
     """Tool dispatcher raises → typed error result + error branch."""
+
     async def dispatch(_tc: ToolCall) -> dict:
         raise RuntimeError("upstream 500")
 
@@ -434,6 +435,7 @@ async def test_tool_call_dispatch_raises_routes_to_error():
 @pytest.mark.asyncio
 async def test_tool_call_unlabeled_outbound_terminates_when_missing():
     """No labelled branch + no fallback edge → executor terminates."""
+
     async def dispatch(_tc: ToolCall) -> dict:
         return {"event_id": "evt_1"}
 
@@ -612,8 +614,14 @@ async def test_confirm_classifier_llm_error_treated_as_no():
 async def test_per_node_tools_filters_agent_tools_in_place():
     """A node with `tools=["book_meeting"]` must not expose the agent's other
     tools to the LLM while it's active."""
-    book = {"type": "function", "function": {"name": "book_meeting", "parameters": {"type": "object"}}}
-    transfer = {"type": "function", "function": {"name": "transfer_call", "parameters": {"type": "object"}}}
+    book = {
+        "type": "function",
+        "function": {"name": "book_meeting", "parameters": {"type": "object"}},
+    }
+    transfer = {
+        "type": "function",
+        "function": {"name": "transfer_call", "parameters": {"type": "object"}},
+    }
 
     graph = G(
         ("node", "g", "greeting", {"prompt": "Hi."}),
@@ -779,9 +787,7 @@ async def test_tool_call_default_arg_map_copies_var_bag():
     )
     cfg = AgentConfig()
     pipe = Pipeline(cfg, llm=text_llm(["ok"]), tts=fake_tts(), tool_dispatch=dispatch)
-    flow = FlowExecutor(
-        graph=graph, cfg=cfg, pipe=pipe, variables={"title": "X", "start_iso": "Y"}
-    )
+    flow = FlowExecutor(graph=graph, cfg=cfg, pipe=pipe, variables={"title": "X", "start_iso": "Y"})
 
     async def reader():
         async for _ in pipe.events():
@@ -796,8 +802,14 @@ async def test_tool_call_default_arg_map_copies_var_bag():
 @pytest.mark.asyncio
 async def test_per_node_tools_restored_to_base_on_unconfigured_node():
     """A node without `tools` restores the full agent tool set."""
-    book = {"type": "function", "function": {"name": "book_meeting", "parameters": {"type": "object"}}}
-    transfer = {"type": "function", "function": {"name": "transfer_call", "parameters": {"type": "object"}}}
+    book = {
+        "type": "function",
+        "function": {"name": "book_meeting", "parameters": {"type": "object"}},
+    }
+    transfer = {
+        "type": "function",
+        "function": {"name": "transfer_call", "parameters": {"type": "object"}},
+    }
 
     graph = G(
         ("node", "g", "greeting", {"prompt": "Hi."}),

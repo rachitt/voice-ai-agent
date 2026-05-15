@@ -105,9 +105,7 @@ async def test_get_access_token_caches_until_near_expiry(monkeypatch):
     def handler(req: httpx.Request) -> httpx.Response:
         calls.append(req)
         if str(req.url) == cal_mod.TOKEN_URL:
-            return httpx.Response(
-                200, json={"access_token": "tok-abc", "expires_in": 3600}
-            )
+            return httpx.Response(200, json={"access_token": "tok-abc", "expires_in": 3600})
         return httpx.Response(404)
 
     _patch_httpx(monkeypatch, handler)
@@ -203,9 +201,7 @@ async def test_book_event_retries_once_on_401(monkeypatch):
         return httpx.Response(200, json={"id": "evt_after_retry"})
 
     _patch_httpx(monkeypatch, handler)
-    out = await cal_mod.book_event(
-        title="X", start_iso="2026-05-15T15:00:00+00:00"
-    )
+    out = await cal_mod.book_event(title="X", start_iso="2026-05-15T15:00:00+00:00")
     assert out["event_id"] == "evt_after_retry"
     assert state["posts"] == 2
     assert state["tokens"] == 2  # initial + forced refresh

@@ -42,9 +42,7 @@ async def test_api_key_exchange_synthesises_user_when_org_has_none(client, db_se
     db_session.add(org)
     await db_session.flush()
     raw, hashed = generate_api_key("sk_live")
-    db_session.add(
-        models.ApiKey(org_id=org.id, name="bootstrap", prefix=raw[:10], key_hash=hashed)
-    )
+    db_session.add(models.ApiKey(org_id=org.id, name="bootstrap", prefix=raw[:10], key_hash=hashed))
     await db_session.commit()
 
     r = await client.post("/v1/auth/session/api-key", json={"api_key": raw})
@@ -64,14 +62,10 @@ async def test_api_key_exchange_prefers_real_user_when_present(client, db_sessio
     org = models.Org(name="HasUser", slug="has-user-org")
     db_session.add(org)
     await db_session.flush()
-    user = models.User(
-        org_id=org.id, email="founder@example.com", name="F", google_sub="g-1"
-    )
+    user = models.User(org_id=org.id, email="founder@example.com", name="F", google_sub="g-1")
     db_session.add(user)
     raw, hashed = generate_api_key("sk_live")
-    db_session.add(
-        models.ApiKey(org_id=org.id, name="k", prefix=raw[:10], key_hash=hashed)
-    )
+    db_session.add(models.ApiKey(org_id=org.id, name="k", prefix=raw[:10], key_hash=hashed))
     await db_session.commit()
 
     r = await client.post("/v1/auth/session/api-key", json={"api_key": raw})
@@ -194,9 +188,7 @@ async def test_book_event_non_json_response_body(monkeypatch):
     def handler(req: httpx.Request) -> httpx.Response:
         if str(req.url) == cal_mod.TOKEN_URL:
             return httpx.Response(200, json={"access_token": "t", "expires_in": 3600})
-        return httpx.Response(
-            500, text="<html>oops</html>", headers={"content-type": "text/html"}
-        )
+        return httpx.Response(500, text="<html>oops</html>", headers={"content-type": "text/html"})
 
     _patch_cal_httpx(monkeypatch, handler)
     out = await cal_mod.book_event(title="X", start_iso="2026-05-15T15:00:00Z")
@@ -251,9 +243,7 @@ async def test_require_session_404_org_when_user_org_gone(client, db_session):
     org = models.Org(name="Tmp", slug="tmp-org-go")
     db_session.add(org)
     await db_session.flush()
-    user = models.User(
-        org_id=org.id, email="z@example.com", name="Z", google_sub="g-z2"
-    )
+    user = models.User(org_id=org.id, email="z@example.com", name="Z", google_sub="g-z2")
     db_session.add(user)
     await db_session.commit()
     # Delete the org → cascade should also drop user; but we mint a token
@@ -266,9 +256,7 @@ async def test_require_session_404_org_when_user_org_gone(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_require_principal_invalid_cookie_falls_through_to_bearer(
-    client, auth_headers
-):
+async def test_require_principal_invalid_cookie_falls_through_to_bearer(client, auth_headers):
     """Garbage session cookie present — Bearer should still authenticate."""
     r = await client.get(
         "/v1/agents",

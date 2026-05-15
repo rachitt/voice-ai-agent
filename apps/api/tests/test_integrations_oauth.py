@@ -42,9 +42,7 @@ def _patch_httpx(monkeypatch, mod, handler):
 
 @pytest.mark.asyncio
 async def test_connect_requires_session(client):
-    r = await client.get(
-        "/v1/integrations/google/calendar/connect", follow_redirects=False
-    )
+    r = await client.get("/v1/integrations/google/calendar/connect", follow_redirects=False)
     assert r.status_code == 401
 
 
@@ -108,11 +106,13 @@ async def test_callback_persists_refresh_token(client, db_session, monkeypatch):
     assert r.status_code == 302, r.text
     assert "/settings/integrations?connected=google_calendar" in r.headers["location"]
 
-    row = (await db_session.execute(
-        models.OAuthIntegration.__table__.select().where(
-            models.OAuthIntegration.org_id == org.id
+    row = (
+        await db_session.execute(
+            models.OAuthIntegration.__table__.select().where(
+                models.OAuthIntegration.org_id == org.id
+            )
         )
-    )).first()
+    ).first()
     assert row is not None
     assert row.refresh_token == "ref-1"
     assert row.account_email == "cal@example.com"
@@ -148,9 +148,7 @@ async def test_callback_missing_refresh_token_502(client, monkeypatch, db_sessio
         if "oauth2.googleapis.com/token" in str(req.url):
             # Google sometimes omits refresh_token if user already granted before
             # without prompt=consent. We force consent → this is the misconfig path.
-            return httpx.Response(
-                200, json={"access_token": "acc", "expires_in": 3600}
-            )
+            return httpx.Response(200, json={"access_token": "acc", "expires_in": 3600})
         return httpx.Response(404)
 
     _patch_httpx(monkeypatch, integ_router, handler)
@@ -201,9 +199,7 @@ async def test_callback_token_exchange_failure_502(client, monkeypatch, db_sessi
 
 
 @pytest.mark.asyncio
-async def test_callback_upsert_overwrites_prior_integration(
-    client, monkeypatch, db_session
-):
+async def test_callback_upsert_overwrites_prior_integration(client, monkeypatch, db_session):
     org = models.Org(name="O", slug="o-upsert")
     db_session.add(org)
     await db_session.flush()
@@ -241,11 +237,13 @@ async def test_callback_upsert_overwrites_prior_integration(
     )
     assert r.status_code == 302
     # Refresh+email overwritten in place — count remains 1.
-    rows = (await db_session.execute(
-        models.OAuthIntegration.__table__.select().where(
-            models.OAuthIntegration.org_id == org.id
+    rows = (
+        await db_session.execute(
+            models.OAuthIntegration.__table__.select().where(
+                models.OAuthIntegration.org_id == org.id
+            )
         )
-    )).all()
+    ).all()
     assert len(rows) == 1
     assert rows[0].refresh_token == "NEW"
     assert rows[0].account_email == "fresh@example.com"
@@ -474,9 +472,7 @@ async def test_book_event_for_org_refreshes_expired_token(db_session, monkeypatc
         if "/events" in str(req.url):
             posts["event_calls"] += 1
             assert req.headers.get("authorization") == "Bearer acc-fresh"
-            return httpx.Response(
-                200, json={"id": "evt_refreshed", "htmlLink": "https://x"}
-            )
+            return httpx.Response(200, json={"id": "evt_refreshed", "htmlLink": "https://x"})
         return httpx.Response(404)
 
     _patch_httpx(monkeypatch, cal_mod, handler)
@@ -493,9 +489,7 @@ async def test_book_event_for_org_refreshes_expired_token(db_session, monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_book_event_for_org_refresh_failure_returns_typed_error(
-    db_session, monkeypatch
-):
+async def test_book_event_for_org_refresh_failure_returns_typed_error(db_session, monkeypatch):
     """Refresh endpoint returns 401 → adapter surfaces calendar_token_refresh_failed."""
     from datetime import UTC, datetime, timedelta
 
@@ -693,9 +687,7 @@ async def test_book_event_for_org_transport_error(db_session, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_book_event_for_org_falls_back_to_sa_when_no_integration(
-    db_session, monkeypatch
-):
+async def test_book_event_for_org_falls_back_to_sa_when_no_integration(db_session, monkeypatch):
     """No integration row → adapter falls back to env-SA path. Without SA
     creds configured either, returns calendar_unconfigured."""
     org = models.Org(name="O", slug="o-no-int")

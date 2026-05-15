@@ -99,9 +99,7 @@ def patch_ws_stt(db_engine, monkeypatch):
 
 
 def _seed_web_call(loopbound) -> str:
-    return _seed_call_sync(
-        loopbound, direction="web", status="queued", first_message="hello"
-    )
+    return _seed_call_sync(loopbound, direction="web", status="queued", first_message="hello")
 
 
 def test_stt_pump_emits_stt_frames_and_feeds_finals(patch_ws_stt, monkeypatch):

@@ -49,9 +49,7 @@ def _key(*, voice_id: str, tts_model_id: str, sample_rate: int, text: str) -> st
     return f"tts:v1:{hashlib.sha256(raw).hexdigest()}"
 
 
-async def get_pcm(
-    *, voice_id: str, tts_model_id: str, sample_rate: int, text: str
-) -> bytes | None:
+async def get_pcm(*, voice_id: str, tts_model_id: str, sample_rate: int, text: str) -> bytes | None:
     """Look up previously-synthesised PCM. Returns None on miss or any error
     so callers can treat it as "synth path"."""
     norm = text.strip()

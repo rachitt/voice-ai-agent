@@ -14,9 +14,7 @@ async def session_user(db_session):
     org = models.Org(name="CsrfOrg", slug="csrf-org")
     db_session.add(org)
     await db_session.flush()
-    user = models.User(
-        org_id=org.id, email="csrf@example.com", name="C", google_sub="g-csrf"
-    )
+    user = models.User(org_id=org.id, email="csrf@example.com", name="C", google_sub="g-csrf")
     db_session.add(user)
     await db_session.commit()
     token = mint_session(user.id, org.id)
@@ -35,9 +33,7 @@ async def test_get_does_not_require_csrf(client, session_user):
 
 @pytest.mark.asyncio
 async def test_session_write_without_csrf_header_is_403(client, session_user):
-    r = await client.post(
-        "/v1/api-keys", json={"name": "x"}, cookies=session_user["cookie"]
-    )
+    r = await client.post("/v1/api-keys", json={"name": "x"}, cookies=session_user["cookie"])
     assert r.status_code == 403
     assert "csrf" in r.json()["detail"].lower()
 

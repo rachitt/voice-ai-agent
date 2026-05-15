@@ -150,16 +150,18 @@ async def _resolve_tools(
     # Pre-fetch any custom tool ids in one query so we don't N+1.
     ref_strings = [t for t in (ver.tools or []) if isinstance(t, str)]
     ref_strings += [
-        t.get("name") for t in (ver.tools or []) if isinstance(t, dict) and "name" in t and isinstance(t.get("name"), str)
+        t.get("name")
+        for t in (ver.tools or [])
+        if isinstance(t, dict) and "name" in t and isinstance(t.get("name"), str)
     ]
     tool_ids = [s for s in ref_strings if s.startswith("tool_")]
     db_rows: dict[str, Tool] = {}
     if tool_ids and db is not None and org_id is not None:
         rows = (
-            await db.execute(
-                select(Tool).where(Tool.org_id == org_id, Tool.id.in_(tool_ids))
-            )
-        ).scalars().all()
+            (await db.execute(select(Tool).where(Tool.org_id == org_id, Tool.id.in_(tool_ids))))
+            .scalars()
+            .all()
+        )
         db_rows = {r.id: r for r in rows}
 
     for t in ver.tools or []:
@@ -197,9 +199,7 @@ async def _resolve_tools(
     return tool_defs, custom_tools
 
 
-async def _dispatch_http_tool(
-    row: Tool, args: dict[str, Any], *, call_id: str
-) -> dict[str, Any]:
+async def _dispatch_http_tool(row: Tool, args: dict[str, Any], *, call_id: str) -> dict[str, Any]:
     """POST the LLM-generated `args` to the user-configured tool endpoint
     and return a dict the LLM can use as the tool's result. Errors are
     coerced into a normal result so the LLM can react ("the tool failed,

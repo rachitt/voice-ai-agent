@@ -51,7 +51,14 @@ async def _make_call(db_session, *, provider_call_id: str | None = "cc_x", to_nu
 
 def test_all_builtins_registered():
     names = {d["function"]["name"] for d in builtin_definitions()}
-    assert {"end_call", "transfer_call", "send_dtmf", "leave_voicemail", "kb_lookup", "extract_data"} <= names
+    assert {
+        "end_call",
+        "transfer_call",
+        "send_dtmf",
+        "leave_voicemail",
+        "kb_lookup",
+        "extract_data",
+    } <= names
 
 
 @pytest.mark.asyncio
@@ -101,9 +108,7 @@ async def test_end_call_without_telnyx_still_completes(db_session):
 async def test_transfer_call_requires_to(db_session):
     call = await _make_call(db_session)
     tx = FakeTelnyx()
-    res = await dispatch(
-        "transfer_call", ToolContext(call=call, db=db_session, telnyx=tx, args={})
-    )
+    res = await dispatch("transfer_call", ToolContext(call=call, db=db_session, telnyx=tx, args={}))
     assert res == {"error": "missing_to"}
     assert tx.transfers == []
 
