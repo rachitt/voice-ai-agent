@@ -10,18 +10,24 @@ vi.mock('@/lib/api', () => ({
 const connectMock = vi.fn(async () => undefined)
 const hangupMock = vi.fn()
 const sendUserTextMock = vi.fn()
-let lastClient: any = null
+type FakeWebCallClient = {
+  opts: Record<string, unknown>
+  connect: typeof connectMock
+  hangup: typeof hangupMock
+  sendUserText: typeof sendUserTextMock
+}
+let lastClient: FakeWebCallClient | null = null
 
 vi.mock('@/lib/webcall', () => {
   class WebCallClient {
-    opts: any
-    constructor(opts: any) {
-      this.opts = opts
-      lastClient = this
-    }
+    opts: Record<string, unknown>
     connect = connectMock
     hangup = hangupMock
     sendUserText = sendUserTextMock
+    constructor(opts: Record<string, unknown>) {
+      this.opts = opts
+      lastClient = this as unknown as FakeWebCallClient
+    }
   }
   return { WebCallClient }
 })
