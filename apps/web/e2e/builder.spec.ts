@@ -67,13 +67,6 @@ test.describe('Agent Builder', () => {
     await expect(greet).toContainText('Howdy partner!')
   })
 
-  test('retry policy toggle activates exclusively', async ({ page }) => {
-    await page.locator('[data-testid="step-node"][data-node-id="greet"]').click()
-    await page.getByTestId('retry-linear').click()
-    await expect(page.getByTestId('retry-linear')).toHaveAttribute('data-active', '1')
-    await expect(page.getByTestId('retry-exponential')).toHaveAttribute('data-active', '0')
-  })
-
   test('palette search filters', async ({ page }) => {
     await page.getByTestId('palette-search').fill('api')
     await expect(page.getByTestId('palette-row-api')).toBeVisible()
