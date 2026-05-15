@@ -17,12 +17,10 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from app.main import create_app
-from app.pipeline.orchestrator import AgentConfig, PipelineEvent
 from app.pipeline.stt import TranscriptEvent
 from app.pipeline.web_session import mint_ws_token
 from app.routers import telnyx_media_ws as tmws
 from app.routers import web_call_ws as wcws
-
 from tests.test_ws_session_loop import (
     FakePipeline,
     LoopBoundSessionLocal,
@@ -34,7 +32,7 @@ from tests.test_ws_session_loop import (
 class FakeDGWithTranscripts:
     """Drop-in DeepgramStream that emits a pre-baked transcript script."""
 
-    instances: list["FakeDGWithTranscripts"] = []
+    instances: list[FakeDGWithTranscripts] = []
     script: list[TranscriptEvent] = []
 
     def __init__(self, *, sample_rate: int = 16000) -> None:
@@ -43,7 +41,7 @@ class FakeDGWithTranscripts:
         self.closed = False
         FakeDGWithTranscripts.instances.append(self)
 
-    async def __aenter__(self) -> "FakeDGWithTranscripts":
+    async def __aenter__(self) -> FakeDGWithTranscripts:
         return self
 
     async def __aexit__(self, *_):
@@ -71,7 +69,7 @@ class FakeDGRaisingEnter:
     def __init__(self, *, sample_rate: int = 16000) -> None:
         self.sample_rate = sample_rate
 
-    async def __aenter__(self) -> "FakeDGRaisingEnter":
+    async def __aenter__(self) -> FakeDGRaisingEnter:
         raise RuntimeError("DEEPGRAM_API_KEY not configured")
 
     async def __aexit__(self, *_):

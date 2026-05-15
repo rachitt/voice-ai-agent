@@ -15,7 +15,6 @@ from app.core.config import get_settings
 from app.db import models
 from app.webhooks import dispatcher as wh
 
-
 # ---------- runner ---------------------------------------------------------
 
 

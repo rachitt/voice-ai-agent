@@ -386,7 +386,7 @@ async def test_classify_returns_no_on_llm_exception():
 @pytest.mark.asyncio
 async def test_classify_explicit_no_starts_with_no():
     """Explicit 'no, the caller…' should still classify as no."""
-    from app.pipeline.orchestrator import TextChunk, TurnComplete, ToolCall  # noqa: F401
+    from app.pipeline.orchestrator import TextChunk, ToolCall, TurnComplete  # noqa: F401
 
     class _FakePipe:
         _messages: list[dict] = [{"role": "user", "content": "I want pizza"}]

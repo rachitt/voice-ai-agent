@@ -21,7 +21,6 @@ from app.pipeline.stt import TranscriptEvent
 from app.pipeline.web_session import mint_ws_token
 from app.routers import telnyx_media_ws as tmws
 from app.routers import web_call_ws as wcws
-
 from tests.test_ws_session_loop import (
     FakePipeline,
     LoopBoundSessionLocal,
@@ -32,7 +31,7 @@ from tests.test_ws_session_loop import (
 
 
 class _DGYields:
-    instances: list["_DGYields"] = []
+    instances: list[_DGYields] = []
     script: list[TranscriptEvent] = []
 
     def __init__(self, *, sample_rate: int = 16000) -> None:
@@ -40,7 +39,7 @@ class _DGYields:
         self.pushed: list[bytes] = []
         _DGYields.instances.append(self)
 
-    async def __aenter__(self) -> "_DGYields":
+    async def __aenter__(self) -> _DGYields:
         return self
 
     async def __aexit__(self, *_):

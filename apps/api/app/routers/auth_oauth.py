@@ -31,10 +31,9 @@ from fastapi import (  # noqa: F401
     status,
 )
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from pydantic import BaseModel, Field
 
 from app.core.config import get_settings
 from app.core.csrf import CSRF_COOKIE, new_csrf_token, set_csrf_cookie

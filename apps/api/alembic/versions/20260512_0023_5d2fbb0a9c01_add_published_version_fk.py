@@ -10,8 +10,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from alembic import op
-import sqlalchemy as sa
-
 
 revision: str = '5d2fbb0a9c01'
 down_revision: str | None = '4c1ae73c6f01'

@@ -18,7 +18,6 @@ from app.core.security import generate_api_key
 from app.db import models
 from app.pipeline import event_bus
 
-
 # ----- auth_oauth.exchange_api_key_for_session -----------------------------
 
 

@@ -101,7 +101,7 @@ async def test_callback_persists_refresh_token(client, db_session, monkeypatch):
     _patch_httpx(monkeypatch, integ_router, handler)
 
     r = await client.get(
-        f"/v1/integrations/google/calendar/callback?code=goodcode&state=st1",
+        "/v1/integrations/google/calendar/callback?code=goodcode&state=st1",
         cookies={"voice_int_state": f"st1|{org.id}"},
         follow_redirects=False,
     )
@@ -155,7 +155,7 @@ async def test_callback_missing_refresh_token_502(client, monkeypatch, db_sessio
 
     _patch_httpx(monkeypatch, integ_router, handler)
     r = await client.get(
-        f"/v1/integrations/google/calendar/callback?code=c&state=st",
+        "/v1/integrations/google/calendar/callback?code=c&state=st",
         cookies={"voice_int_state": f"st|{org.id}"},
         follow_redirects=False,
     )
@@ -193,7 +193,7 @@ async def test_callback_token_exchange_failure_502(client, monkeypatch, db_sessi
 
     _patch_httpx(monkeypatch, integ_router, handler)
     r = await client.get(
-        f"/v1/integrations/google/calendar/callback?code=c&state=st",
+        "/v1/integrations/google/calendar/callback?code=c&state=st",
         cookies={"voice_int_state": f"st|{org.id}"},
         follow_redirects=False,
     )
@@ -235,7 +235,7 @@ async def test_callback_upsert_overwrites_prior_integration(
 
     _patch_httpx(monkeypatch, integ_router, handler)
     r = await client.get(
-        f"/v1/integrations/google/calendar/callback?code=c&state=st",
+        "/v1/integrations/google/calendar/callback?code=c&state=st",
         cookies={"voice_int_state": f"st|{org.id}"},
         follow_redirects=False,
     )

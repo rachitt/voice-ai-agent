@@ -14,7 +14,6 @@ import json
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -68,7 +67,7 @@ class FakePipeline:
 class FakeDG:
     """Drop-in DeepgramStream for the PSTN session pump."""
 
-    instances: list["FakeDG"] = []
+    instances: list[FakeDG] = []
 
     def __init__(self, *, sample_rate: int = 16000) -> None:
         self.sample_rate = sample_rate
@@ -76,7 +75,7 @@ class FakeDG:
         self.closed = False
         FakeDG.instances.append(self)
 
-    async def __aenter__(self) -> "FakeDG":
+    async def __aenter__(self) -> FakeDG:
         return self
 
     async def __aexit__(self, *_):

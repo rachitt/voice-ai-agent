@@ -65,7 +65,20 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S105", "S106", "S311", "S608", "N802"]
+"tests/**" = [
+    "S105",  # hardcoded password — false positives on tokens in test fixtures
+    "S106",
+    "S311",
+    "S608",
+    "N802",
+    "N803",  # boto3-style PascalCase kwargs in test stubs (Bucket=, Key=, …)
+    "B017",  # `pytest.raises(Exception)` — used for "WS rejects bad token" smoke
+]
+# Google OAuth + service-account endpoint constants get flagged as
+# possible passwords. They're public URLs.
+"app/tools/calendar.py" = ["S105"]
+"app/routers/integrations.py" = ["S105"]
+"app/storage/s3.py" = ["N803"]  # boto3 PascalCase kwargs are the SDK contract
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
