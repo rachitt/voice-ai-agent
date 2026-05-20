@@ -107,3 +107,52 @@ class TtsProviderError(RuntimeError):
 
     Surfaced up to `Pipeline._speak` so the WS can tell the UI why the
     agent went silent."""
+
+
+async def synth_pcm(
+    *,
+    text: str,
+    voice_id: str,
+    model_id: str = "eleven_flash_v2_5",
+    sample_rate: int = 16000,
+) -> bytes:
+    """One-shot synthesis: push text → drain audio → return concatenated PCM.
+
+    Used by the test-call panel to mint canned voice clips on demand. Hits
+    the same Redis cache the orchestrator's `_speak` uses (`tts_cache`),
+    keyed by (voice_id, model_id, sample_rate, text), so repeat synthesis
+    of the same line is free after the first call.
+
+    Returns PCM16 LE @ 16 kHz mono by default — the wire format the
+    pcm-capture-worklet on the browser side speaks fluently."""
+    from app.pipeline import tts_cache
+
+    cached = await tts_cache.get_pcm(
+        voice_id=voice_id,
+        tts_model_id=model_id,
+        sample_rate=sample_rate,
+        text=text,
+    )
+    if cached:
+        return cached
+
+    accumulated = bytearray()
+    async with ElevenLabsStream(
+        voice_id=voice_id,
+        model_id=model_id,
+        sample_rate=sample_rate,
+    ) as tts:
+        await tts.push_text(text)
+        await tts.flush()
+        async for frame in tts.audio():
+            accumulated.extend(frame)
+
+    pcm = bytes(accumulated)
+    await tts_cache.put_pcm(
+        voice_id=voice_id,
+        tts_model_id=model_id,
+        sample_rate=sample_rate,
+        text=text,
+        pcm=pcm,
+    )
+    return pcm

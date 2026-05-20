@@ -115,6 +115,15 @@ export class WebCallClient {
     for (const track of this.micStream.getAudioTracks()) track.enabled = !muted
   }
 
+  /** Push raw Int16 PCM @ 16 kHz mono up the WS as if it came from the mic.
+   *  Used to replay a saved voice clip into the agent — STT and barge-in
+   *  treat it identically to live speech. Accepts any BufferSource so the
+   *  caller can hand us a Uint8Array slice without copying. */
+  sendRawAudio(buf: ArrayBufferLike | ArrayBufferView): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
+    this.ws.send(buf as ArrayBuffer)
+  }
+
   /** Schedule one PCM chunk (Int16 LE @ 16 kHz mono) for playback. */
   private playPcm(buf: ArrayBuffer): void {
     if (!this.ac) return

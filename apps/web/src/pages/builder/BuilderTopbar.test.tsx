@@ -7,14 +7,6 @@ vi.mock('@/lib/api', () => ({
   getApiBase: () => 'http://test',
 }))
 
-// Stub the TestCallModal so we can isolate Topbar behaviour without
-// pulling in WebCallClient / network plumbing for these tests.
-vi.mock('./TestCallModal', () => ({
-  TestCallModal: ({ agentId }: { agentId: string }) => (
-    <div data-testid="mock-test-call-modal">modal:{agentId}</div>
-  ),
-}))
-
 import { api } from '@/lib/api'
 import { BuilderTopbar } from './BuilderTopbar'
 import { useBuilder, type AgentMeta } from './store'
@@ -42,6 +34,7 @@ beforeEach(() => {
     agentMeta: META,
     saveStatus: 'idle',
     saveError: null,
+    testCallAgentId: null,
   })
   vi.clearAllMocks()
 })
@@ -75,11 +68,11 @@ describe('BuilderTopbar', () => {
     expect(screen.getByTestId('publish')).toBeDisabled()
   })
 
-  it('opens test-call modal on click', () => {
+  it('flips testCallAgentId in the store on Test Call click', () => {
     render(withRouter(<BuilderTopbar agentId="ag_1" />))
-    expect(screen.queryByTestId('mock-test-call-modal')).toBeNull()
+    expect(useBuilder.getState().testCallAgentId).toBeNull()
     fireEvent.click(screen.getByTestId('test-call'))
-    expect(screen.getByTestId('mock-test-call-modal')).toHaveTextContent('modal:ag_1')
+    expect(useBuilder.getState().testCallAgentId).toBe('ag_1')
   })
 
   it('publishes happy-path, rotates versionId, marks saved', async () => {
