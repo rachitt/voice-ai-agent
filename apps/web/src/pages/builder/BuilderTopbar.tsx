@@ -5,7 +5,6 @@ import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { parseApiError } from '@/lib/parseApiError'
 import { useBuilder } from './store'
-import { TestCallModal } from './TestCallModal'
 import { SaveStatusPill } from './SaveStatusPill'
 
 export function BuilderTopbar({ agentId }: { agentId: string }) {
@@ -14,9 +13,10 @@ export function BuilderTopbar({ agentId }: { agentId: string }) {
   const saveError = useBuilder((s) => s.saveError)
   const setSaveStatus = useBuilder((s) => s.setSaveStatus)
   const setAgentMetaFields = useBuilder((s) => s.setAgentMetaFields)
+  const openTestCall = useBuilder((s) => s.openTestCall)
+  const testCallAgentId = useBuilder((s) => s.testCallAgentId)
   const [publishErrors, setPublishErrors] = useState<string[] | null>(null)
   const [publishing, setPublishing] = useState(false)
-  const [testCallOpen, setTestCallOpen] = useState(false)
 
   const name = agentMeta?.name ?? (agentId === 'demo' ? 'Sales Qualifier Agent' : 'Loading…')
   const versionLabel = agentMeta ? `Version ${agentMeta.versionNumber}` : 'Version —'
@@ -81,11 +81,11 @@ export function BuilderTopbar({ agentId }: { agentId: string }) {
         </button>
         <button
           data-testid="test-call"
-          onClick={() => agentMeta && setTestCallOpen(true)}
+          onClick={() => agentMeta && openTestCall(agentMeta.id)}
           disabled={!agentMeta}
           title={
             agentMeta
-              ? 'Open a live test call'
+              ? 'Open a live test call in the right-side panel'
               : agentId === 'demo'
                 ? 'Demo agent is offline-only — open a real agent from the console to test'
                 : 'Loading agent…'
@@ -93,6 +93,7 @@ export function BuilderTopbar({ agentId }: { agentId: string }) {
           className={cn(
             'inline-flex items-center gap-1.5 rounded-[8px] border border-border bg-panel-2 px-3 py-1.5 text-xs text-muted hover:text-fg',
             !agentMeta && 'opacity-60 cursor-not-allowed',
+            testCallAgentId && 'border-accent/40 text-accent',
           )}
         >
           <Phone className="h-3.5 w-3.5" /> Test call
@@ -131,14 +132,6 @@ export function BuilderTopbar({ agentId }: { agentId: string }) {
       )}
 
       <span className="sr-only">{agentId}</span>
-
-      {testCallOpen && agentMeta && (
-        <TestCallModal
-          agentId={agentMeta.id}
-          agentVariableDefaults={agentMeta.dynamicVariables}
-          onClose={() => setTestCallOpen(false)}
-        />
-      )}
     </header>
   )
 }

@@ -64,3 +64,80 @@ async def test_voices_falls_back_when_live_fails(client, auth_headers, monkeypat
     # Static fallback present (Sarah is the free-tier default; Rachel was
     # dropped because it's a library voice and 402s on free accounts).
     assert any(v["id"] == "EXAVITQu4vr4xnSDxMaL" for v in items)
+
+
+@pytest.mark.asyncio
+async def test_synthesize_requires_auth(client):
+    r = await client.post("/v1/voices/v_abc/synthesize", json={"text": "hello"})
+    assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_synthesize_returns_pcm(client, auth_headers, monkeypatch):
+    from app.routers import catalog
+
+    monkeypatch.setattr(catalog.get_settings(), "elevenlabs_api_key", "secret", raising=False)
+
+    async def fake_synth(*, text, voice_id, model_id="eleven_flash_v2_5", sample_rate=16000):  # noqa: ARG001
+        # 1 ms of silence — enough to assert binary path without hitting the
+        # network. Caller doesn't care what's in the bytes, only the wire
+        # format + content-type.
+        return b"\x00\x00" * 16
+
+    monkeypatch.setattr(catalog, "synth_pcm", fake_synth)
+    r = await client.post(
+        "/v1/voices/v_abc/synthesize",
+        headers=auth_headers,
+        json={"text": "say hello"},
+    )
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/octet-stream"
+    assert r.headers["x-audio-format"] == "pcm_s16le_16000_mono"
+    assert r.content == b"\x00\x00" * 16
+
+
+@pytest.mark.asyncio
+async def test_synthesize_503_when_unconfigured(client, auth_headers, monkeypatch):
+    from app.routers import catalog
+
+    monkeypatch.setattr(catalog.get_settings(), "elevenlabs_api_key", None, raising=False)
+    r = await client.post(
+        "/v1/voices/v_abc/synthesize",
+        headers=auth_headers,
+        json={"text": "hi there"},
+    )
+    assert r.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_synthesize_rejects_oversized_text(client, auth_headers, monkeypatch):
+    from app.routers import catalog
+
+    monkeypatch.setattr(catalog.get_settings(), "elevenlabs_api_key", "secret", raising=False)
+    # Pydantic field validator should 422 before we ever hit ElevenLabs.
+    r = await client.post(
+        "/v1/voices/v_abc/synthesize",
+        headers=auth_headers,
+        json={"text": "x" * 600},
+    )
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_synthesize_502_on_provider_error(client, auth_headers, monkeypatch):
+    from app.pipeline.tts import TtsProviderError
+    from app.routers import catalog
+
+    monkeypatch.setattr(catalog.get_settings(), "elevenlabs_api_key", "secret", raising=False)
+
+    async def fail_synth(*, text, voice_id, model_id="eleven_flash_v2_5", sample_rate=16000):  # noqa: ARG001
+        raise TtsProviderError("quota_exceeded")
+
+    monkeypatch.setattr(catalog, "synth_pcm", fail_synth)
+    r = await client.post(
+        "/v1/voices/v_abc/synthesize",
+        headers=auth_headers,
+        json={"text": "anything"},
+    )
+    assert r.status_code == 502
+    assert "quota_exceeded" in r.text

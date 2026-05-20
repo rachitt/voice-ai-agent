@@ -183,6 +183,30 @@ export const api = {
       method: 'POST',
     }),
   consoleSummary: () => req<ConsoleSummary>(`/v1/console/summary`),
+  // Server-side TTS for the Test Call panel's voice clips. Returns raw
+  // PCM16 LE @ 16 kHz mono — the same wire format the live mic worklet
+  // sends, so the client can stream the response back over the WS as if
+  // a human spoke the line. The server caches per (voice_id, text), so
+  // re-synthesis of an existing clip is free.
+  synthesizeClip: async (voiceId: string, text: string): Promise<ArrayBuffer> => {
+    const headers = new Headers({ 'content-type': 'application/json' })
+    const tok = readCsrfCookie()
+    if (tok) headers.set('x-csrf-token', tok)
+    const r = await fetch(
+      `${getApiBase()}/v1/voices/${encodeURIComponent(voiceId)}/synthesize`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: JSON.stringify({ text }),
+      },
+    )
+    if (!r.ok) {
+      const body = await r.text().catch(() => '')
+      throw new ApiError(r.status, r.statusText, body)
+    }
+    return await r.arrayBuffer()
+  },
 }
 
 // --- api keys (dashboard / session auth) -----------------------------------

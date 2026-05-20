@@ -51,6 +51,12 @@ type State = {
     id: string | null,
     progress?: { filled: string[]; missing: string[] } | null,
   ) => void
+  /** Set when the user presses Test Call. Drives the right-panel tab row so
+   *  the inspector reveals a 'Test Call' tab alongside 'Node'. Cleared on
+   *  hangup so the inspector goes back to its plain single-pane shape. */
+  testCallAgentId: string | null
+  openTestCall: (agentId: string) => void
+  closeTestCall: () => void
   setSelected: (id: string | null) => void
   setConnectionError: (msg: string | null) => void
   setPendingBranchConnect: (c: Connection | null) => void
@@ -150,6 +156,10 @@ export const useBuilder = create<State>((set, get) => ({
   activeFlowProgress: null,
   setActiveFlowNodeId: (id, progress) =>
     set({ activeFlowNodeId: id, activeFlowProgress: progress ?? null }),
+  testCallAgentId: null,
+  openTestCall: (agentId) => set({ testCallAgentId: agentId }),
+  closeTestCall: () =>
+    set({ testCallAgentId: null, activeFlowNodeId: null, activeFlowProgress: null }),
   setSelected: (id) => set({ selectedId: id }),
   setConnectionError: (msg) => set({ connectionError: msg }),
   setPendingBranchConnect: (c) => set({ pendingBranchConnect: c }),

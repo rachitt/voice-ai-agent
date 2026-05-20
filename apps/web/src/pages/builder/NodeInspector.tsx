@@ -40,14 +40,17 @@ const PROMPT_PLACEHOLDERS: Record<string, string> = {
   voicemail: 'Message to leave, e.g. "Sorry we missed you. Call back at …"',
 }
 
-export function NodeInspector() {
+// `bare` strips the outer aside chrome (width, border-l). Used when the
+// inspector lives inside RightPanel's own aside, so we don't get a nested
+// border + a second width column.
+export function NodeInspector({ bare = false }: { bare?: boolean } = {}) {
   const node = useBuilder((s) => s.nodes.find((n) => n.id === s.selectedId)) ?? null
   const edges = useBuilder((s) => s.edges)
   const update = useBuilder((s) => s.updateNodeData)
   const removeNode = useBuilder((s) => s.removeNode)
   const duplicateNode = useBuilder((s) => s.duplicateNode)
 
-  if (!node) return <EmptyInspector />
+  if (!node) return <EmptyInspector bare={bare} />
 
   const set = (patch: Partial<StepData>) => update(node.id, patch)
   const Icon = KIND_ICON[node.data.kind]
@@ -55,11 +58,16 @@ export function NodeInspector() {
   const inboundCount = edges.filter((e) => e.target === node.id).length
   const outboundCount = edges.filter((e) => e.source === node.id).length
 
+  const Shell = bare ? 'div' : 'aside'
+  const shellClass = bare
+    ? 'flex h-full min-h-0 flex-col bg-panel'
+    : 'flex w-[320px] shrink-0 flex-col border-l border-border bg-panel'
+
   return (
-    <aside
+    <Shell
       data-testid="inspector"
       data-node-id={node.id}
-      className="flex w-[320px] shrink-0 flex-col border-l border-border bg-panel"
+      className={shellClass}
     >
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <div className="grid h-7 w-7 place-items-center rounded-[8px] border border-border bg-panel-2">
@@ -236,16 +244,17 @@ export function NodeInspector() {
 
         {/* Holding spot for the dropped placeholders / debug code below. */}
       </div>
-    </aside>
+    </Shell>
   )
 }
 
-function EmptyInspector() {
+function EmptyInspector({ bare = false }: { bare?: boolean } = {}) {
+  const Shell = bare ? 'div' : 'aside'
+  const shellClass = bare
+    ? 'flex h-full min-h-0 flex-col bg-panel'
+    : 'flex w-[320px] shrink-0 flex-col border-l border-border bg-panel'
   return (
-    <aside
-      data-testid="inspector-empty"
-      className="flex w-[320px] shrink-0 flex-col border-l border-border bg-panel"
-    >
+    <Shell data-testid="inspector-empty" className={shellClass}>
       <div className="border-b border-border px-4 py-3">
         <div className="text-sm font-medium text-fg">Agent Settings</div>
         <div className="mt-0.5 text-[11px] text-muted">
@@ -255,7 +264,7 @@ function EmptyInspector() {
       <div className="min-h-0 flex-1 overflow-auto p-4">
         <AgentSettingsPanel />
       </div>
-    </aside>
+    </Shell>
   )
 }
 

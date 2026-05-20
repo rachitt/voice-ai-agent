@@ -11,11 +11,13 @@ from __future__ import annotations
 import time
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import BaseModel, Field
 
 from app.core.auth import AuthedPrincipal, require_principal
 from app.core.config import get_settings
 from app.core.logging import log
+from app.pipeline.tts import TtsProviderError, synth_pcm
 
 router = APIRouter(prefix="/v1", tags=["catalog"])
 
@@ -128,3 +130,55 @@ async def list_models(_: AuthedPrincipal = Depends(require_principal)) -> dict[s
 @router.get("/voices")
 async def list_voices(_: AuthedPrincipal = Depends(require_principal)) -> dict[str, list[dict]]:
     return {"items": await _voices_payload()}
+
+
+# Hard cap mirrors how short canned utterances are in practice ("Yes",
+# "my email is foo@bar.com", "Tomorrow at 3pm") — well under the limit.
+# Keeps a runaway request from burning a lot of ElevenLabs credits.
+_SYNTH_MAX_CHARS = 500
+
+
+class SynthesizeBody(BaseModel):
+    text: str = Field(min_length=1, max_length=_SYNTH_MAX_CHARS)
+
+
+@router.post("/voices/{voice_id}/synthesize")
+async def synthesize_voice(
+    voice_id: str,
+    body: SynthesizeBody,
+    _: AuthedPrincipal = Depends(require_principal),
+) -> Response:
+    """Synthesize `body.text` with `voice_id` → return PCM16 LE @ 16 kHz mono.
+
+    Used by the Test Call panel to mint canned voice clips on demand. The
+    bytes returned are the exact wire format the live mic worklet uses, so
+    the browser can stream them back over the same WS as if a human spoke.
+    Hits the shared TTS Redis cache, so repeated synthesis of the same
+    (voice, text) pair is free."""
+    if not get_settings().elevenlabs_api_key:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "elevenlabs not configured — set VOICE_ELEVENLABS_API_KEY",
+        )
+    try:
+        pcm = await synth_pcm(text=body.text, voice_id=voice_id)
+    except TtsProviderError as exc:
+        # 502 — upstream provider rejected. Carries through quota/voice-id
+        # messages so the UI can render a useful banner instead of 'failed'.
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"tts: {exc}") from exc
+    except Exception as exc:
+        log.warning("synthesize.err", err=str(exc), voice_id=voice_id)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "synthesis failed") from exc
+
+    if not pcm:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "tts: empty response")
+
+    return Response(
+        content=pcm,
+        media_type="application/octet-stream",
+        headers={
+            # Mark with the wire format so a curl debug session is unambiguous.
+            "x-audio-format": "pcm_s16le_16000_mono",
+            "x-audio-byte-rate": "32000",  # 16000 Hz * 2 bytes/sample
+        },
+    )

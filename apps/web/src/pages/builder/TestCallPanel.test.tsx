@@ -40,7 +40,7 @@ vi.mock('@/lib/webcall', () => {
 })
 
 import { api } from '@/lib/api'
-import { TestCallModal } from './TestCallModal'
+import { TestCallPanel } from './TestCallPanel'
 
 function withRouter(ui: React.ReactNode) {
   return <MemoryRouter>{ui}</MemoryRouter>
@@ -59,11 +59,11 @@ beforeEach(() => {
 
 afterEach(cleanup)
 
-describe('TestCallModal', () => {
+describe('TestCallPanel', () => {
   it('renders agent id chip + connecting status + overrides editor', async () => {
     render(
       withRouter(
-        <TestCallModal
+        <TestCallPanel
           agentId="ag_1"
           agentVariableDefaults={{ foo: 'bar', count: 3 }}
           onClose={() => {}}
@@ -85,14 +85,14 @@ describe('TestCallModal', () => {
     ;(api.createWebCall as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
       new Error('401 Unauthorized'),
     )
-    render(withRouter(<TestCallModal agentId="ag_1" onClose={() => {}} />))
+    render(withRouter(<TestCallPanel agentId="ag_1" onClose={() => {}} />))
     await waitFor(() =>
       expect(screen.getByTestId('test-call-status')).toHaveAttribute('data-status', 'error'),
     )
   })
 
   it('transitions to live on open event + appends agent_text to transcript', async () => {
-    render(withRouter(<TestCallModal agentId="ag_1" onClose={() => {}} />))
+    render(withRouter(<TestCallPanel agentId="ag_1" onClose={() => {}} />))
     await waitFor(() => expect(lastClient).not.toBeNull())
     client().opts.onEvent({ type: 'open' })
     await waitFor(() =>
@@ -105,7 +105,7 @@ describe('TestCallModal', () => {
   })
 
   it('sends user text + appends to transcript on Send click', async () => {
-    render(withRouter(<TestCallModal agentId="ag_1" onClose={() => {}} />))
+    render(withRouter(<TestCallPanel agentId="ag_1" onClose={() => {}} />))
     await waitFor(() => expect(lastClient).not.toBeNull())
     client().opts.onEvent({ type: 'open' })
     // Text input is behind the "Type instead" disclosure now (voice-first UX).
@@ -120,7 +120,7 @@ describe('TestCallModal', () => {
 
   it('End button hangs up + closes status; close button invokes onClose', async () => {
     const onClose = vi.fn()
-    render(withRouter(<TestCallModal agentId="ag_1" onClose={onClose} />))
+    render(withRouter(<TestCallPanel agentId="ag_1" onClose={onClose} />))
     await waitFor(() => expect(lastClient).not.toBeNull())
     client().opts.onEvent({ type: 'open' })
     fireEvent.click(await screen.findByTestId('test-call-end'))
@@ -131,7 +131,7 @@ describe('TestCallModal', () => {
   })
 
   it('error event surfaces server error message', async () => {
-    render(withRouter(<TestCallModal agentId="ag_1" onClose={() => {}} />))
+    render(withRouter(<TestCallPanel agentId="ag_1" onClose={() => {}} />))
     await waitFor(() => expect(lastClient).not.toBeNull())
     client().opts.onEvent({ type: 'error', error: 'connection refused' })
     await waitFor(() =>

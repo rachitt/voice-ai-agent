@@ -4,7 +4,7 @@ import { api, latestVersion } from '@/lib/api'
 import { BuilderTopbar } from './BuilderTopbar'
 import { StepPalette } from './StepPalette'
 import { FlowCanvas } from './FlowCanvas'
-import { NodeInspector } from './NodeInspector'
+import { RightPanel } from './RightPanel'
 import { useAutosave } from './useAutosave'
 import { useBuilder } from './store'
 
@@ -86,7 +86,7 @@ export function BuilderPage() {
       <div className="flex min-h-0 flex-1">
         <StepPalette />
         <FlowCanvas />
-        <NodeInspector />
+        <RightPanel />
       </div>
     </div>
   )

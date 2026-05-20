@@ -14,7 +14,7 @@ export function StepNodeView({ id, data, selected }: NodeProps<TStepNode>) {
   const rule = RULES[data.kind]
   const canTarget = rule.inAllowed
   const canSource = rule.outMax > 0 && !rule.terminal
-  // Live-call execution highlight. The TestCallModal flips this id every
+  // Live-call execution highlight. The TestCallPanel flips this id every
   // time the FlowExecutor emits `flow_node` on the WS. Border + pulsing
   // glow make the active step pop without disturbing layout.
   const active = useBuilder((s) => s.activeFlowNodeId === id)
